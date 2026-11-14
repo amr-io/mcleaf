@@ -41,13 +41,13 @@ variable "vm_name" {
 }
 
 variable "zone" {
-  type = string
+  type        = string
   description = "Availability Zone for the VM"
-  default = "3"
+  default     = "3"
 }
 
 variable "subscription_id" {
-  type = string
+  type        = string
   description = "Azure's Subscription ID where resources are provisioned"
-  default = null
+  default     = null
 }

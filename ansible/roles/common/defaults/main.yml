@@ -1,2 +1,6 @@
 ---
 swapfile_size: "8G"
+
+zram_algo: "zstd"
+zram_percent: 100
+zram_priority: 100

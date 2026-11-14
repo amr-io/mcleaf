@@ -69,8 +69,8 @@
     path: /datadisk/swapfile
   register: swap_stat
 
-- name: Allocate 6GB swapfile on /datadisk
-  ansible.builtin.command: fallocate -l 6G /datadisk/swapfile
+- name: Allocate {{ swapfile_size }}B swapfile on /datadisk
+  ansible.builtin.command: fallocate -l {{ swapfile_size }} /datadisk/swapfile
   when: not swap_stat.stat.exists # Skip if swapfile exists
 
 - name: Set read/write permissions by root on swapfile

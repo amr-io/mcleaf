@@ -42,3 +42,26 @@ terraform.rc
 # Optional: ignore plan files saved before destroying Terraform configuration
 # Uncomment the line below if you want to ignore planout files.
 # planout
+
+# Private keys and certificates
+*.pem
+*.key
+*.pub
+id_rsa*
+*.crt
+
+# Cloud & Backend Secrets
+backend.hcl
+*.secret
+*.env
+!*.env.example
+
+# Ansible artifacts
+*.retry
+.ansible/
+inventory/hosts.ini
+!inventory/hosts.ini.example
+
+# Local debug & logs
+*.log
+/scratch/

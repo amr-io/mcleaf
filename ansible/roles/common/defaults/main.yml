@@ -1,6 +1,6 @@
 ---
-swapfile_size: "8G"
+common_swapfile_size: "8G"
 
-zram_algo: "zstd"
-zram_percent: 100
-zram_priority: 100
+common_zram_algo: "zstd"
+common_zram_percent: 100
+common_zram_priority: 100

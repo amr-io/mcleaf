@@ -50,13 +50,13 @@
 
 - name: Get filesystem UUID of /dev/sdb
   ansible.builtin.command: blkid -s UUID -o value /dev/sdb
-  register: sdb_uuid # capture output to sdb_uuid var
+  register: common_sdb_uuid # capture output to sdb_uuid var
   changed_when: false # read-only
 
 - name: Mount secondary SSD to /datadisk in /etc/fstab
   ansible.posix.mount:
     path: /datadisk
-    src: "UUID={{ sdb_uuid.stdout }}"
+    src: "UUID={{ common_sdb_uuid.stdout }}"
     fstype: ext4
     opts: defaults,nofail
     state: mounted # write to /etc/fstab and mount
@@ -64,11 +64,12 @@
 - name: Check swapfile on /datadisk
   ansible.builtin.stat:
     path: /datadisk/swapfile
-  register: swap_stat
+  register: common_swap_stat
 
-- name: Allocate {{ swapfile_size }} swapfile on /datadisk
-  ansible.builtin.command: fallocate -l {{ swapfile_size }} /datadisk/swapfile
-  when: not swap_stat.stat.exists # Skip if swapfile exists
+- name: Allocate swapfile on /datadisk with size {{ common_swapfile_size }}
+  ansible.builtin.command: fallocate -l {{ common_swapfile_size }} /datadisk/swapfile
+  when: not common_swap_stat.stat.exists # Skip if swapfile exists
+  changed_when: true
 
 - name: Set read/write permissions by root on swapfile
   ansible.builtin.file:
@@ -79,7 +80,8 @@
 
 - name: Format swapfile as Linux swap
   ansible.builtin.command: mkswap /datadisk/swapfile
-  when: not swap_stat.stat.exists # Skip if swap is active
+  when: not common_swap_stat.stat.exists # Skip if swap is active
+  changed_when: true
 
 - name: Enable swapfile in /etc/fstab
   ansible.posix.mount:
@@ -92,6 +94,6 @@
 - name: Activate swap
   # Sample output: 'swapon: /datadisk/swapfile: swapon failed: Device or resource busy'
   ansible.builtin.command: swapon /datadisk/swapfile
-  register: swapon_res
+  register: common_swapon_res
   changed_when: false
-  failed_when: swapon_res.rc != 0 and "Device or resource busy" not in swapon_res.stderr
+  failed_when: common_swapon_res.rc != 0 and "Device or resource busy" not in common_swapon_res.stderr

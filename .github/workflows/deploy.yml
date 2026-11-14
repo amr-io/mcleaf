@@ -4,7 +4,9 @@ on:
   push:
     branches:
       - main
-      - "feature/**"
+  pull_request:
+    branches:
+      - dev
   workflow_dispatch:
 
 jobs:
@@ -26,7 +28,7 @@ jobs:
 
       - name: Configure SSH Key
         env:
-          SSH_PRIVATE_KEY: $${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh
           echo "${SSH_PRIVATE_KEY}" > ~/.ssh/id_rsa

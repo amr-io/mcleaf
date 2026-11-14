@@ -59,8 +59,8 @@ backend.hcl
 # Ansible artifacts
 *.retry
 .ansible/
-inventory/hosts.ini
-!inventory/hosts.ini.example
+**/hosts.ini
+!**/hosts.ini.example
 
 # Local debug & logs
 *.log

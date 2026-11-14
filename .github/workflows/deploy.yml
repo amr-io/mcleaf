@@ -23,12 +23,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install Ansible
           ansible-galaxy collection install ansible.posix community.general
-      
+
       - name: Configure SSH Key
         env:
           SSH_PRIVATE_KEY: $${{ secrets.SSH_PRIVATE_KEY }}
         run: |
-          mkdir -p ~/.SSH
+          mkdir -p ~/.ssh
           echo "${SSH_PRIVATE_KEY}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           echo -e "Host *\n  StrictHostKeyChecking accept-new\n" > ~/.ssh/config

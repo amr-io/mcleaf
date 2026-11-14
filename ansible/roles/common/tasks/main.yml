@@ -27,17 +27,14 @@
     - { key: "vm.vfs_cache_pressure", value: "50" }
 
 - name: Configure zramswap compression settings
-  ansible.builtin.lineinfile:
-    path: /etc/default/zramswap
-    regexp: "^{{ item.key }}=" # Matches existing KEY=
-    line: "{{ item.key }}={{ item.value }}"
-    state: present
-  loop:
-    - { key: "ALGO", value: "zstd" } # Modern algo: ~3.6x compression ratio on text
-    - { key: "PERCENT", value: "100" } # equivalent to physical RAM size
-    - { key: "PRIORITY", value: "100" } # Higher priority than disk swap
+  ansible.builtin.template:
+    src: zramswap.j2
+    dest: /etc/default/zramswap
+    owner: root
+    group: root
+    mode: "0644"
 
-  notify: Restart zramswap # Triggers handler if the file content is changed
+  notify: Restart zramswap # Restart if the file content is changed
 
 - name: Ensure /datadisk is mounted
   ansible.builtin.file:
@@ -64,12 +61,12 @@
     opts: defaults,nofail
     state: mounted # write to /etc/fstab and mount
 
-- name: Check 6GB swapfile on /datadisk
+- name: Check swapfile on /datadisk
   ansible.builtin.stat:
     path: /datadisk/swapfile
   register: swap_stat
 
-- name: Allocate {{ swapfile_size }}B swapfile on /datadisk
+- name: Allocate {{ swapfile_size }} swapfile on /datadisk
   ansible.builtin.command: fallocate -l {{ swapfile_size }} /datadisk/swapfile
   when: not swap_stat.stat.exists # Skip if swapfile exists
 

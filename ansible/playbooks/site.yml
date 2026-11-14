@@ -1,0 +1,12 @@
+---
+- name: Provision MCLeaf Production Host
+  hosts: webservers
+  become: true
+  gather_facts: true
+
+  roles:
+    - common
+    # - security
+    # - docker
+    # - overleaf
+    # - daemons

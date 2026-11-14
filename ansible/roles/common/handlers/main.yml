@@ -1,0 +1,6 @@
+---
+# Restart if /etc/default/zramswap is changed
+- name: Restart zramswap
+  ansible.builtin.systemd:
+    name: zramswap
+    state: restarted

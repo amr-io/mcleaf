@@ -6,7 +6,7 @@ overleaf_repo_version: "master"
 
 # Container image & version
 overleaf_image_name: "ghcr.io/amr-io/sharelatex"
-overleaf_version: "5.0.4-texlive-full"
+overleaf_version: "5.0.4-with-texlive-full"
 
 # Application branding & URLs
 overleaf_app_name: "Mindcracked's Overleaf"

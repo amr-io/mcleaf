@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BACKUP_DIR="{{ daemons_backups_dir }}"
+TOOLKIT_DIR="{{ daemons_toolkit_dir }}"
+SECRETS_FILE="/etc/overleaf-secrets.env"
+R2_REMOTE_BUCKET="{{ daemons_r2_remote_path }}"
+NOTIFY_DISCORD="{{ daemons_scripts_dir }}/notify-discord.sh"
+LOG_FILE="${BACKUP_DIR}/restore.log"
+START_TIME=$(date +%s)
+
+log() { echo "[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] $*" | tee -a "${LOG_FILE}"; }
+
+send_alert() {
+    local status="$1" title="$2" desc="$3" field_name="${4:-}" field_val="${5:-}"
+    if [ -x "${NOTIFY_DISCORD}" ]; then
+        "${NOTIFY_DISCORD}" "${status}" "${title}" "${desc}" "${field_name}" "${field_val}" || true
+    fi
+}
+
+on_error() {
+    local exit_code=$?
+    local failed_line=$1
+    log "CRITICAL: Script failed at line ${failed_line} with exit code ${exit_code}!"
+    send_alert "emergency" "Disaster Recovery Aborted" \
+        "Execution crashed on line ${failed_line} (exit code ${exit_code})." \
+        "Action Required" "Inspect ~/backups/restore.log on the host for the full stack trace."
+}
+trap 'on_error ${LINENO}' ERR
+
+mkdir -p "${BACKUP_DIR}"
+log "=== Initiating Overleaf Disaster Recovery ==="
+
+# 1. Validate Secrets File
+if [ -r "${SECRETS_FILE}" ]; then
+    set -a && source "${SECRETS_FILE}" && set +a
+else
+    log "CRITICAL: Cannot read secrets file at ${SECRETS_FILE}!"
+    send_alert "emergency" "Disaster Recovery Failed" "Missing ${SECRETS_FILE} on host."
+    exit 1
+fi
+
+# 2. Resolve Target Archive (Parameter -> R2 Latest -> Local Latest)
+TARGET="${1:-$(rclone lsf --sort time --reverse "${R2_REMOTE_BUCKET}/" 2>/dev/null | grep -E '^overleaf-backup-.*\.tar\.gz$' | head -n 1 || true)}"
+if [ -z "${TARGET}" ]; then
+    TARGET=$(ls -t "${BACKUP_DIR}"/overleaf-backup-*.tar.gz 2>/dev/null | head -n 1 | xargs -r basename || true)
+fi
+
+if [ -z "${TARGET}" ]; then
+    log "CRITICAL: No backup archive found in R2 or locally!"
+    send_alert "emergency" "Disaster Recovery Aborted" "No backup archives available."
+    exit 1
+fi
+
+DEST="${BACKUP_DIR}/temp_restore_${START_TIME}"
+mkdir -p "${DEST}"
+trap 'rm -rf "${DEST}"' EXIT
+
+# 3. Download & Verify Integrity
+if [ ! -f "${BACKUP_DIR}/${TARGET}" ]; then
+    log "Fetching ${TARGET} from Cloudflare R2..."
+    rclone copy "${R2_REMOTE_BUCKET}/${TARGET}" "${DEST}/" --retries 3 -v >> "${LOG_FILE}" 2>&1
+    ARCHIVE="${DEST}/${TARGET}"
+else
+    ARCHIVE="${BACKUP_DIR}/${TARGET}"
+fi
+
+if ! tar -tzf "${ARCHIVE}" >/dev/null 2>&1; then
+    log "CRITICAL: Archive tar/gzip verification failed!"
+    send_alert "emergency" "Disaster Recovery Corrupted" "Archive ${TARGET} failed integrity checks."
+    exit 1
+fi
+
+tar -xzf "${ARCHIVE}" -C "${DEST}"
+if [ ! -f "${DEST}/mongo_dump.archive.gz" ] || [ ! -f "${DEST}/overleaf_data.tar.gz" ]; then
+    log "CRITICAL: Missing mongo_dump or overleaf_data in archive!"
+    send_alert "emergency" "Disaster Recovery Failed" "Archive missing required dump assets."
+    exit 1
+fi
+
+# 4. Stop Web App, Ensure Mongo Online, and Restore
+log "Stopping ShareLaTeX and ensuring MongoDB is active..."
+docker stop sharelatex >> "${LOG_FILE}" 2>&1 || true
+docker ps | grep -q "mongo" || docker start mongo >> "${LOG_FILE}" 2>&1
+
+log "Restoring MongoDB and data assets..."
+if ! docker exec -i mongo mongorestore --archive --gzip --drop < "${DEST}/mongo_dump.archive.gz" >> "${LOG_FILE}" 2>&1; then
+    log "CRITICAL: mongorestore failed!"
+    send_alert "emergency" "Disaster Recovery Failed" "MongoDB database restoration failed."
+    exit 1
+fi
+
+# Restore Overleaf data and config
+sudo tar -xzf "${DEST}/overleaf_data.tar.gz" --overwrite --same-owner -C "${TOOLKIT_DIR}/data" >> "${LOG_FILE}" 2>&1
+[ -f "${DEST}/overleaf_config.tar.gz" ] && tar -xzf "${DEST}/overleaf_config.tar.gz" -C "${TOOLKIT_DIR}" >> "${LOG_FILE}" 2>&1
+chown -R {{ ansible_user }}:{{ ansible_user }} "${TOOLKIT_DIR}/config"
+
+# 5. Start Service & Health Check
+docker start sharelatex >> "${LOG_FILE}" 2>&1
+log "Running health check on http://127.0.0.1:8000/login..."
+HEALTHY=0
+for i in {1..30}; do
+    if curl -s -f -o /dev/null http://127.0.0.1:8000/login; then HEALTHY=1; break; fi
+    sleep 2
+done
+
+DURATION=$(( $(date +%s) - START_TIME ))
+
+if [ "${HEALTHY}" -eq 1 ]; then
+    log "=== Disaster Recovery completed successfully in ${DURATION}s ==="
+    send_alert "success" "Overleaf DR Restored" "Restored from ${TARGET} in ${DURATION}s" "Status" "Healthy (HTTP 200 OK)"
+else
+    log "CRITICAL: Health check timed out!"
+    send_alert "emergency" "Disaster Recovery Failed" "Timed out waiting for HTTP 200 on /login." "Logs" "$(docker logs sharelatex --tail 8 2>&1)"
+    exit 1
+fi

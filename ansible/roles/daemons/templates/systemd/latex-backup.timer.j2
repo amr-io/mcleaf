@@ -1,0 +1,10 @@
+[Unit]
+Description=Run ShareLaTeX Backup every 2 hours
+
+[Timer]
+OnCalendar={{ daemons_backup_calendar }}
+Persistent=false
+
+[Install]
+WantedBy=timers.target
+

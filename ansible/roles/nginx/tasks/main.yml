@@ -1,0 +1,93 @@
+---
+# =============================================
+# Nginx Reverse Proxy, Security Jails, Certbot SSL
+# =============================================
+
+# ===== Install official packages for web server and SSL automation =====
+- name: Install nginx, Certbot, and python3-certbot-nginx
+  ansible.builtin.apt:
+    name: [nginx, certbot, python3-certbot-nginx]
+    state: present
+    update_cache: false
+
+# ===== Configure SSL Certificate =====
+- name: Check if 'Let's Encrypt' certificate already exists
+  ansible.builtin.stat:
+    path: "/etc/letsencrypt/live/{{ ansible_host }}/fullchain.pem"
+  register: nginx_ssl_cert
+
+- name: Deploy Nginx reverse proxy conf
+  ansible.builtin.template:
+    src: overleaf.j2
+    dest: /etc/nginx/sites-available/overleaf
+    owner: root
+    group: root
+    mode: "0644"
+  when: not nginx_ssl_cert.stat.exists
+  notify: Restart nginx
+
+- name: Enable Overleaf Nginx site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/overleaf
+    dest: /etc/nginx/sites-enabled/overleaf
+    state: link
+    force: true
+  notify: Restart nginx
+
+# ===== Cleanup =====
+- name: Remove default Nginx site conf
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Restart nginx
+
+# ===== RAM Disk Telemetry Init (for cloud worker later) =====
+- name: Deploy /boot-status placeholder
+  ansible.builtin.template:
+    src: boot-status.json.j2
+    dest: /dev/shm/boot-status.json
+    owner: www-data
+    group: www-data
+    mode: "0644"
+
+# ===== Fail2ban Rate Limiter =====
+- name: Deploy Fail2ban Nginx rate-limiter filter
+  ansible.builtin.template:
+    src: nginx-limit-req.filter.local.j2
+    dest: /etc/fail2ban/filter.d/nginx-limit-req.local
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart fail2ban
+
+- name: Deploy Fail2ban Nginx rate-limiter jail
+  ansible.builtin.template:
+    src: nginx-limit-req.jail.local.j2
+    dest: /etc/fail2ban/jail.d/nginx-limit-req.local
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart fail2ban
+
+# ===== Force queued handlers to execute =====
+- name: Flush Handlers
+  ansible.builtin.meta: flush_handlers
+
+# ===== Verify daemon state =====
+- name: Ensure Nginx service is running and enabled
+  ansible.builtin.systemd:
+    name: nginx
+    state: started
+    enabled: true
+
+# ===== Start Certbot =====
+- name: Obtain and install Let's Encrypt SSL certificate
+  ansible.builtin.command: >
+    certbot --nginx
+    -d {{ ansible_host }}
+    --non-interactive
+    --agree-tos
+    -m {{ nginx_certbot_email }}
+    --redirect
+  when: not nginx_ssl_cert.stat.exists
+  changed_when: true

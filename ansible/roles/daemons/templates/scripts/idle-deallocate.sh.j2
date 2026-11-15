@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Inactivity thresholds and state paths
+IDLE_COUNTER_FILE="/dev/shm/idle_counter"
+LAST_BYTES_FILE="/dev/shm/last_overleaf_bytes"
+LOG_FILE="/var/log/overleaf-idle.log"
+THRESHOLD_TICKS={{ daemons_idle_threshold_ticks }}
+TRAFFIC_THRESHOLD={{ daemons_idle_traffic_threshold_bytes }}
+LATEX_USER="{{ ansible_facts["user_id"] }}"
+LATEX_HOME="{{ ansible_facts["user_dir"] }}"
+SCRIPTS_DIR="{{ daemons_scripts_dir }}"
+
+log() {
+	echo "[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] $*" | tee -a "${LOG_FILE}"
+}
+
+# Always Maintain Fresh Network Baseline
+iptables -C INPUT -i lo -p tcp -m multiport --ports 8000 2>/dev/null || \
+iptables -I INPUT 1 -i lo -p tcp -m multiport --ports 8000
+
+CURRENT_BYTES=$(iptables -v -n -x -L INPUT | awk '$5=="lo" && /8000/ {print $2; exit}' || echo 0)
+CURRENT_BYTES=${CURRENT_BYTES:-0}
+
+PREV_BYTES=$(cat "${LAST_BYTES_FILE}" 2>/dev/null || echo "${CURRENT_BYTES}")
+echo "${CURRENT_BYTES}" > "${LAST_BYTES_FILE}"
+
+DELTA_BYTES=$(( CURRENT_BYTES - PREV_BYTES ))
+if [ "${DELTA_BYTES}" -lt 0 ]; then
+    DELTA_BYTES="${CURRENT_BYTES}"
+fi
+
+# 1. Active LaTeX Compilations
+if pgrep -f "pdflatex|biber|xelatex|latexmk" > /dev/null 2>&1; then
+    log "Active compilation detected. Resetting idle counter."
+    echo 0 > "${IDLE_COUNTER_FILE}"
+    exit 0
+fi
+
+# 2. Active SSH Keystrokes (<30m on open PTYs) OR Quick SSH Login/Logout (<5m in wtmp)
+NOW=$(date +%s)
+for pts in /dev/pts/[0-9]*; do
+    [ -e "${pts}" ] || continue
+    if [ $(( NOW - $(stat -c %Y "${pts}" 2>/dev/null || echo 0) )) -lt 1800 ]; then
+        log "Active SSH session on ${pts} (<30m idle). Resetting idle counter."
+        echo 0 > "${IDLE_COUNTER_FILE}"
+        exit 0
+    fi
+done
+
+if [ -e /var/log/wtmp ] && [ $(( NOW - $(stat -c %Y /var/log/wtmp 2>/dev/null || echo 0) )) -lt 300 ]; then
+    log "Quick SSH login/logout detected in last 5m (/var/log/wtmp). Resetting idle counter."
+    echo 0 > "${IDLE_COUNTER_FILE}"
+    exit 0
+fi
+
+# 3. Check Web & WebSocket Inactivity
+if [ "${DELTA_BYTES}" -gt "${TRAFFIC_THRESHOLD}" ]; then
+    log "Active web traffic detected (${DELTA_BYTES} B > ${TRAFFIC_THRESHOLD} B). Resetting counter."
+    echo 0 > "${IDLE_COUNTER_FILE}"
+    exit 0
+fi
+
+# Increment Counter upon Silence
+CURRENT_TICKS=$(cat "${IDLE_COUNTER_FILE}" 2>/dev/null || echo 0)
+CURRENT_TICKS=$(( CURRENT_TICKS + 1 ))
+echo "${CURRENT_TICKS}" > "${IDLE_COUNTER_FILE}"
+log "Inactivity tick #${CURRENT_TICKS}/${THRESHOLD_TICKS} (Delta: ${DELTA_BYTES} B, Threshold ${TRAFFIC_THRESHOLD} B)."
+
+if [ "${CURRENT_TICKS}"	-lt "${THRESHOLD_TICKS}" ]; then
+	exit 0
+fi
+
+# 30-Minute Threshold Hit: Execute the pipeline
+log "CRITICAL: 30 minutes of inactivity. Deallocation VM..."
+echo 0 > "${IDLE_COUNTER_FILE}"
+
+# Inhibit Disaster Watchdog so it doesn't trigger false alarms during shutdown
+touch /dev/shm/deallocating_in_progress
+systemctl stop overleaf-watchdog.timer 2>/dev/null || true
+
+# A. Discord Auto-Shutdown Notification
+sudo -u "${LATEX_USER}" -H "${SCRIPTS_DIR}/notify-discord.sh" "shutdown" \
+    "Overleaf Auto-Shutdown Triggered" \
+    "30 minutes of inactivity detected. Initiating backup and cloud deallocation." \
+    "VM State" "Transitioning to Deallocated" || true
+
+# B. Off-Site Backup to CF R2
+if ! BACKUP_OUTPUT=$(sudo -u "${LATEX_USER}" -H "${SCRIPTS_DIR}/backup-overleaf.sh" 2>&1); then
+	log "WARNING: Backup script failed! Proceeding with deallocation"
+	BACKUP_SNIPPET=$(echo "${BACKUP_OUTPUT}" | tail -n 6)
+
+	sudo -u "${LATEX_USER}" -H "${SCRIPTS_DIR}/notify-discord.sh" "warning" \
+		"Backup Failed!" "Cloudflare R2 backup failed after retries. Local archive is preserved." \
+		"Last Output" "\`\`\`text
+${BACKUP_SNIPPET}
+\`\`\`" || true
+fi
+
+# C. Graceful DB & Container Flush
+log "Stopping containers..."
+docker stop sharelatex mongo redis >> "${LOG_FILE}" 2>&1 || true
+
+# D. Azure IMDS REST API Deallocate
+log "Querying Azure IMDS for OAuth2 Bearer token..."
+TOKEN=$(curl -s -H "Metadata:true" --connect-timeout 5 \
+    "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/" | jq -r .access_token)
+
+VM_META=$(curl -s -H "Metadata:true" --connect-timeout 5 \
+    "http://169.254.169.254/metadata/instance/compute?api-version=2021-02-01")
+
+SUB_ID=$(echo "${VM_META}" | jq -r .subscriptionId)
+RG=$(echo "${VM_META}" | jq -r .resourceGroupName)
+VM_NAME=$(echo "${VM_META}" | jq -r .name)
+
+log "Issuing Azure Compute Deallocate REST call for VM '${VM_NAME}' in RG '${RG}'..."
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+    -H "Authorization: Bearer ${TOKEN}" \
+    -H "Content-Length: 0" \
+    --connect-timeout 10 \
+    "https://management.azure.com/subscriptions/${SUB_ID}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${VM_NAME}/deallocate?api-version=2023-09-01")
+
+if [[ "${HTTP_STATUS}" =~ ^20[0-2]$ ]]; then
+    log "Azure accepted deallocation request (HTTP ${HTTP_STATUS}). Fabric pulling compute."
+    sudo -u "${LATEX_USER}" -H "${SCRIPTS_DIR}/notify-discord.sh" "success" \
+	    "Azure Deallocation Success!" "VM is Deallocated Successfully"
+    exit 0
+else
+    log "CRITICAL: Azure deallocation call failed with HTTP ${HTTP_STATUS}! Rolling back containers..."
+    docker start mongo redis sharelatex >> "${LOG_FILE}" 2>&1 || true
+    sudo -u "${LATEX_USER}" -H "${SCRIPTS_DIR}/notify-discord.sh" "emergency" \
+        "Azure Deallocation API Failure" \
+        "Azure Compute REST API returned HTTP ${HTTP_STATUS}. Containers restarted to prevent outage." \
+        "Target VM" "${VM_NAME} (${RG})" || true
+    exit 1
+fi

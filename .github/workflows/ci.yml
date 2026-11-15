@@ -1,0 +1,36 @@
+name: CI Pipeline
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+jobs:
+  lint-terraform:
+    name: Validate Terraform IaaS
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.16.6"
+      - name: Terraform Format
+        run: |
+          cd terraform
+          terraform fmt -check -diff
+      - name: Validate Terraform Configuration
+        run: |
+          cd terraform
+          terraform init -backend=false
+          terraform validate
+  lint-ansible:
+    name: Validate Ansible & lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run ansible-lint
+        uses: ansible/ansible-lint@v26
+        with:
+          working_directory: "ansible"
+          requirements_file: "requirements.yml"

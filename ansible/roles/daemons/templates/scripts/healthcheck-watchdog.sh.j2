@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+NOTIFY_DISCORD="{{ daemons_scripts_dir }}/notify-discord.sh"
+OUTAGE_FLAG="/dev/shm/overleaf_outage_alerted"
+DEALLOC_FLAG="/dev/shm/deallocating_in_progress"
+HOST_NAME="{{ daemons_r2_prefix }}"
+
+# 0. Suppress false alarms during intentional cloud deallocation or system shutdown
+if [ -f "${DEALLOC_FLAG}" ] || [ -f "/run/systemd/shutdown/scheduled" ]; then
+    exit 0
+fi
+
+# 1. Check Containers and HTTP Login Endpoint
+IS_DOWN=0
+REASON=""
+
+if ! docker ps --filter "name=^mongo$" --filter "status=running" --format '{% raw %}{{.Names}}{% endraw %}' | grep -q "^mongo$"; then
+    IS_DOWN=1
+    REASON="MongoDB container is stopped or crashed."
+elif ! docker ps --filter "name=^sharelatex$" --filter "status=running" --format '{% raw %}{{.Names}}{% endraw %}' | grep -q "^sharelatex$"; then
+    IS_DOWN=1
+    REASON="ShareLaTeX web container has stopped."
+elif ! curl -s -f -o /dev/null --connect-timeout 5 http://127.0.0.1:8000/login; then
+    IS_DOWN=1
+    REASON="HTTP endpoint (127.0.0.1:8000/login) is unreachable or returning errors."
+fi
+
+# 2. State Machine: Alert on failure, Alert on recovery
+if [ "${IS_DOWN}" -eq 1 ]; then
+    # Fire alert only if not already alerted
+    if [ ! -f "${OUTAGE_FLAG}" ]; then
+        touch "${OUTAGE_FLAG}"
+        if [ -x "${NOTIFY_DISCORD}" ]; then
+            "${NOTIFY_DISCORD}" "emergency" \
+                "Disaster Detected: Overleaf Service Outage" \
+                "Overleaf has entered an unhealthy state on ${HOST_NAME}." \
+                "Failure Cause" "${REASON}
+• **Action:** SSH to host or trigger GitHub Disaster Recovery." || true
+        fi
+    fi
+else
+    # If service recovered and alert was previously sent, send recovery notification
+    if [ -f "${OUTAGE_FLAG}" ]; then
+        rm -f "${OUTAGE_FLAG}"
+        if [ -x "${NOTIFY_DISCORD}" ]; then
+            "${NOTIFY_DISCORD}" "success" \
+                "Overleaf Service Recovered" \
+                "All containers and HTTP endpoints on ${HOST_NAME} are now healthy." \
+                "Status" "HTTP 200 OK" || true
+        fi
+    fi
+fi

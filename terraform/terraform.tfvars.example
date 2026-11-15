@@ -1,0 +1,8 @@
+subscription_id = "00000000-0000-0000-0000-000000000000"
+location        = "polandcentral"
+rg_name         = "latex-shared"
+vm_name         = "latex-vm"
+dns_label       = "mc-leaf"
+admin_username  = "latex"
+disk_size_gb    = 64
+zone            = "3"

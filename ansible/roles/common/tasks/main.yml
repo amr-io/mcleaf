@@ -1,0 +1,100 @@
+---
+- name: Update apt cache and install core utils
+  ansible.builtin.apt:
+    name: [curl, wget, git, tmux, htop, zram-tools, rsync]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Tune Linux kernel memory parameters
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+    sysctl_file: /etc/sysctl.d/99-overleaf-memory.conf
+  loop:
+    # 1. Enable memory overcommit for redis
+    # Allows fork() for Redis BGSAVE snapshots even when RAM is low
+    - { key: "vm.overcommit_memory", value: "1" }
+    # 2. Aggressive swappiness for zram
+    # Tells the kernel to actively compress idle pages into zram.
+    # This keeps active processes always having uncompressed free physical RAM.
+    - { key: "vm.swappiness", value: "100" }
+
+    # 3. Protect filesystem metadata cache
+    # 50 prevents the kernel from purging directory inode caches, speeding up latex multi-file builds.
+    - { key: "vm.vfs_cache_pressure", value: "50" }
+
+- name: Configure zramswap compression settings
+  ansible.builtin.template:
+    src: zramswap.j2
+    dest: /etc/default/zramswap
+    owner: root
+    group: root
+    mode: "0644"
+
+  notify: Restart zramswap # Restart if the file content is changed
+
+- name: Ensure /datadisk is mounted
+  ansible.builtin.file:
+    path: /datadisk
+    state: directory
+    mode: "0755" # rwxr-xr-x
+
+- name: Format the secondary 64GB P6 SSD (/dev/sdb)
+  community.general.filesystem:
+    fstype: ext4
+    dev: /dev/sdb
+    opts: -m 0 -E lazy_itable_init=0,lazy_journal_init=0 # Use exclusively for /data/swap and force immediate inode table init
+  when: "'/datadisk' not in (ansible_facts['mounts'] | map(attribute='mount') | list)"
+
+- name: Get filesystem UUID of /dev/sdb
+  ansible.builtin.command: blkid -s UUID -o value /dev/sdb
+  register: common_sdb_uuid # capture output to sdb_uuid var
+  changed_when: false # read-only
+
+- name: Mount secondary SSD to /datadisk in /etc/fstab
+  ansible.posix.mount:
+    path: /datadisk
+    src: "UUID={{ common_sdb_uuid.stdout }}"
+    fstype: ext4
+    opts: defaults,nofail
+    state: mounted # write to /etc/fstab and mount
+
+- name: Check swapfile on /datadisk
+  ansible.builtin.stat:
+    path: /datadisk/swapfile
+  register: common_swap_stat
+
+- name: Allocate swapfile on /datadisk with size {{ common_swapfile_size }}
+  ansible.builtin.command: fallocate -l {{ common_swapfile_size }} /datadisk/swapfile
+  when: not common_swap_stat.stat.exists # Skip if swapfile exists
+  changed_when: true
+
+- name: Set read/write permissions by root on swapfile
+  ansible.builtin.file:
+    path: /datadisk/swapfile
+    mode: "0600"
+    owner: root
+    group: root
+
+- name: Format swapfile as Linux swap
+  ansible.builtin.command: mkswap /datadisk/swapfile
+  when: not common_swap_stat.stat.exists # Skip if swap is active
+  changed_when: true
+
+- name: Enable swapfile in /etc/fstab
+  ansible.posix.mount:
+    path: none
+    src: /datadisk/swapfile
+    fstype: swap
+    opts: sw # default
+    state: present
+
+- name: Activate swap
+  # Sample output: 'swapon: /datadisk/swapfile: swapon failed: Device or resource busy'
+  ansible.builtin.command: swapon /datadisk/swapfile
+  register: common_swapon_res
+  changed_when: false
+  failed_when: common_swapon_res.rc != 0 and "Device or resource busy" not in common_swapon_res.stderr

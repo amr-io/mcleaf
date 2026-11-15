@@ -1,0 +1,9 @@
+subscription_id = "<your-azure-subscription-id>"
+rg_name         = "latex-shared"
+vm_name         = "latex-vm"
+dns_label       = "mcleaf"
+admin_username  = "latex-admin"
+location        = "polandcentral"
+vm_size         = "Standard_B2ats_v2"
+disk_size_gb    = 64
+zone            = "3"

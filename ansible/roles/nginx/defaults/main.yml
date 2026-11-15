@@ -1,0 +1,17 @@
+---
+# Certbot email
+nginx_certbot_email: "{{ lookup('env', 'CERTBOT_EMAIL') | default('', true) }}"
+
+# Nginx reverse proxy tuning
+nginx_proxy_upstream: "http://127.0.0.1:8000"
+nginx_client_max_body_size: "50M"
+nginx_proxy_timeout: "300s"
+
+# Nginx auth endpoint rate limiting
+nginx_rate_limit: "3r/s"
+nginx_rate_limit_burst: 5
+
+# Fail2ban Layer-7 jail tuning
+nginx_fail2ban_maxretry: 5
+nginx_fail2ban_findtime: 60
+nginx_fail2ban_bantime: "1h"

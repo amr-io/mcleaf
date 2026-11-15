@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Runs at boot, watches Docker milestones, writes live telemetry to RAM disk, then exits.
+
+STATUS_FILE="/dev/shm/boot-status.json"
+
+update_status() {
+    local pct="$1"
+    local stage="$2"
+    local raw_logs="$3"
+
+    python3 -c "
+import json, sys
+logs = sys.stdin.read().splitlines()[-12:]
+data = {
+    'percent': ${pct},
+    'stage': '''${stage}''',
+    'logs': logs
+}
+with open('${STATUS_FILE}', 'w') as f:
+    json.dump(data, f)
+" <<< "${raw_logs}"
+
+    chmod 644 "${STATUS_FILE}" 2>/dev/null || true
+}
+
+# Initial State
+update_status 35 "Ubuntu kernel online. Waiting for Docker..." "System booted. Docker daemon initializing."
+
+# 1. Wait for Docker engine
+while ! docker info >/dev/null 2>&1; do sleep 2; done
+update_status 50 "Docker daemon online. Mounting containers..." "$(docker ps --format 'Container: {% raw %}{{.Names}} ({{.Status}}){% endraw %}')"
+
+# 2. Wait for MongoDB to become healthy
+while ! docker ps | grep -q "mongo.*healthy"; do
+    sleep 2
+done
+update_status 70 "MongoDB database cache ready..." "MongoDB WiredTiger engine active and healthy."
+
+# 3. Wait for ShareLaTeX Runit Daemon
+while ! docker logs sharelatex 2>&1 | grep -q "Booting runit daemon"; do
+    sleep 2
+done
+update_status 85 "Spawning Overleaf Node.js microservices..." "$(docker logs sharelatex --tail 8 2>&1)"
+
+# 4. Wait for HTTP 200 on /login
+while ! curl -s -f -o /dev/null http://127.0.0.1:8000/login; do
+    sleep 2
+done
+update_status 100 "Overleaf is live and ready!" "$(docker logs sharelatex --tail 8 2>&1)"

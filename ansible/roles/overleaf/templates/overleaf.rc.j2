@@ -1,0 +1,32 @@
+#### Overleaf RC ####
+PROJECT_NAME=overleaf
+
+# Sharelatex container
+OVERLEAF_IMAGE_NAME={{ overleaf_image_name }}
+OVERLEAF_DATA_PATH=data/overleaf
+SERVER_PRO=false
+OVERLEAF_LISTEN_IP=127.0.0.1
+OVERLEAF_PORT=8000
+
+# Sibling Containers
+SIBLING_CONTAINERS_ENABLED=false
+DOCKER_SOCKET_PATH=/var/run/docker.sock
+
+# Mongo configuration
+MONGO_ENABLED=true
+MONGO_DATA_PATH=data/mongo
+MONGO_IMAGE=mongo
+MONGO_VERSION=6.0
+
+# Redis configuration
+REDIS_ENABLED=true
+REDIS_DATA_PATH=data/redis
+REDIS_IMAGE=redis:7.4
+REDIS_AOF_PERSISTENCE=true
+
+# Git-bridge configuration (Server Pro only)
+GIT_BRIDGE_ENABLED=false
+GIT_BRIDGE_DATA_PATH=data/git-bridge
+
+# Host Nginx handles TLS; disabled toolkit internal Nginx
+NGINX_ENABLED=false

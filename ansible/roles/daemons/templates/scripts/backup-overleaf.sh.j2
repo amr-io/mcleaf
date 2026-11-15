@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Configuration
+BACKUP_DIR="{{ daemons_backups_dir }}"
+TOOLKIT_DIR="{{ daemons_toolkit_dir }}"
+SECRETS_FILE="/etc/overleaf-secrets.env"
+R2_REMOTE_BUCKET="{{ daemons_r2_remote_path }}"
+RETENTION_DAYS=7
+
+DATE_STAMP=$(date -u +"%Y-%m-%d_%H-%M")
+READABLE_TITLE=$(date -u +"Backup — %b %d, %Y (%I:%M %p UTC)")
+DEST="${BACKUP_DIR}/temp_backup_${DATE_STAMP}"
+FINAL_ARCHIVE="${BACKUP_DIR}/overleaf-backup-${DATE_STAMP}.tar.gz"
+LOG_FILE="${BACKUP_DIR}/backup.log"
+
+mkdir -p "${DEST}" "${BACKUP_DIR}"
+trap 'rm -rf "${DEST}"' EXIT
+
+log() {
+    echo "[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] $*" | tee -a "${LOG_FILE}"
+}
+
+log "=== Starting Overleaf Backup: ${READABLE_TITLE} ==="
+
+# Load R2 & Discord secrets
+if [ -r "${SECRETS_FILE}" ]; then
+    set -a && source "${SECRETS_FILE}" && set +a
+else
+    log "CRITICAL: Cannot read secrets file at ${SECRETS_FILE}!"
+    exit 1
+fi
+
+# 1. MongoDB Dump
+log "Dumping MongoDB..."
+docker exec mongo mongodump --archive --gzip > "${DEST}/mongo_dump.archive.gz" 2>> "${LOG_FILE}"
+
+# 2. Asset Archives
+log "Archiving assets and configuration..."
+tar -czvf "${DEST}/overleaf_data.tar.gz" -C "${TOOLKIT_DIR}/data" overleaf >> "${LOG_FILE}" 2>&1
+tar -czvf "${DEST}/overleaf_config.tar.gz" -C "${TOOLKIT_DIR}" config >> "${LOG_FILE}" 2>&1
+
+# 3. Consolidated Archive
+log "Creating final archive..."
+tar -czvf "${FINAL_ARCHIVE}" -C "${DEST}" . >> "${LOG_FILE}" 2>&1
+
+ARCHIVE_SIZE=$(du -h "${FINAL_ARCHIVE}" | cut -f1)
+log "Archive created successfully (Size: ${ARCHIVE_SIZE})."
+
+# 4. Upload to R2 (Using rclone's built-in exponential backoff & retries)
+log "Uploading to Cloudflare R2 (${R2_REMOTE_BUCKET})..."
+if rclone copy "${FINAL_ARCHIVE}" "${R2_REMOTE_BUCKET}/" \
+    --retries 6 \
+    --retries-sleep 15s \
+    --low-level-retries 10 \
+    --stats 2s \
+    --stats-one-line \
+    -v 2>&1 | tee -a "${LOG_FILE}"; then
+    log "Cloudflare R2 upload completed successfully!"
+else
+    log "CRITICAL: Cloudflare R2 upload failed!"
+    LAST_ERROR=$(tail -n 10 "${LOG_FILE}")
+    if [ -x "${HOME}/scripts/notify-discord.sh" ]; then
+        "${HOME}/scripts/notify-discord.sh" "emergency" \
+            "Overleaf R2 Backup Failure" \
+            "Off-site upload failed after 6 retries. Deallocation aborted." \
+            "Last \`rclone1\` Logs" "${LAST_ERROR}" || true
+    fi
+    exit 1
+fi
+
+# 5. Local Pruning
+log "Pruning local backups older than ${RETENTION_DAYS} days..."
+find "${BACKUP_DIR}" -name "overleaf-backup-*.tar.gz" -type f -mtime +${RETENTION_DAYS} -delete
+
+log "=== Backup completed successfully ==="

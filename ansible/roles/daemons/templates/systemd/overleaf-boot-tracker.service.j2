@@ -1,0 +1,13 @@
+[Unit]
+Description=Overleaf Boot Telemtry Tracker
+After=docker.service
+Before=nginx.service
+
+[Service]
+Type=simple
+User={{ ansible_user }}
+ExecStart={{ daemons_scripts_dir }}/boot-tracker.sh
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

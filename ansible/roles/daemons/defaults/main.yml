@@ -1,0 +1,29 @@
+---
+# Dir paths for scripts and backup archives
+daemons_scripts_dir: "/home/{{ ansible_user }}/scripts"
+daemons_backups_dir: "/home/{{ ansible_user }}/backups"
+daemons_toolkit_dir: "/home/{{ ansible_user }}/overleaf-toolkit"
+
+# ===== Configure Bucket =====
+daemons_env: "{{ lookup('env', 'DEPLOY_ENV') | default('production', true) }}"
+
+daemons_r2_bucket_name: "{{ lookup('env', 'R2_BUCKET_NAME') | default('mcleaf-backups', true) }}"
+
+daemons_r2_prefix: "{{ 'latex-vm' if daemons_env == 'production' else 'latex-vm-' ~ daemons_env }}"
+
+daemons_r2_remote_path: "r2:{{ daemons_r2_bucket_name }}/{{ daemons_r2_prefix }}"
+# -----------------------
+daemons_r2_access_key_id: "{{ lookup('env', 'R2_ACCESS_KEY_ID') | default('', true) }}"
+daemons_r2_secret_access_key: "{{ lookup('env', 'R2_SECRET_ACCESS_KEY') | default('', true) }}"
+daemons_r2_endpoint: "{{ lookup('env', 'R2_ENDPOINT') | default('', true) }}"
+
+# ===== Discord Webhook URL =====
+daemons_discord_webhook_url: "{{ lookup('env', 'DISCORD_WEBHOOK_URL') | default('', true) }}"
+
+# ===== Inactivity Tuning =====
+daemons_idle_threshold_ticks: 6
+daemons_idle_traffic_threshold_bytes: 25600
+daemons_idle_check_interval: "5min"
+daemons_idle_boot_grace: "10min"
+
+daemons_backup_calendar: "00/2:00:00"

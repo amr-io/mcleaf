@@ -72,10 +72,11 @@
     mode: "0755"
   loop:
     - { src: "backup-overleaf.sh", dest: "{{ daemons_scripts_dir }}/backup-overleaf.sh" }
-    - { src: "boot-tracker.sh", dest: "{{ daemons_scripts_dir }}/boot-tracker.sh" }
     - { src: "restore-overleaf.sh", dest: "{{ daemons_scripts_dir }}/restore-overleaf.sh" }
+    - { src: "boot-tracker.sh", dest: "{{ daemons_scripts_dir }}/boot-tracker.sh" }
     - { src: "idle-deallocate.sh", dest: "{{ daemons_scripts_dir }}/idle-deallocate.sh", owner: root, group: root }
     - { src: "notify-discord.sh", dest: "{{ daemons_scripts_dir }}/notify-discord.sh" }
+    - { src: "healthcheck-watchdog.sh", dest: "{{ daemons_scripts_dir }}/healthcheck-watchdog.sh" }
     - { src: "discord_payload.py", dest: "{{ daemons_scripts_dir }}/helpers/discord_payload.py" }
 
 # ==============================
@@ -99,6 +100,7 @@
     - overleaf-boot-tracker.service
     - overleaf-idle-check.service
     - overleaf-idle-check.timer
+    - overleaf-watchdog.timer
 
 # Notify systemd manager
 - name: Reload systemd daemon
@@ -115,3 +117,5 @@
     - latex-backup.timer
     - overleaf-idle-check.timer
     - overleaf-boot-tracker.service
+    - overleaf-watchdog.service
+    - overleaf-watchdog.timer

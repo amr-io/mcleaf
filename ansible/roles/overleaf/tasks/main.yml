@@ -32,11 +32,7 @@
     mode: "{{ item.mode }}"
   loop:
     - { src: "version.j2", dest: "version", mode: "0644" }
-    - {
-        src: "docker-compose.override.yml.j2",
-        dest: "docker-compose.override.yml",
-        mode: "0644",
-      }
+    - { src: "docker-compose.override.yml.j2", dest: "docker-compose.override.yml", mode: "0644" }
     - { src: "overleaf.rc.j2", dest: "overleaf.rc", mode: "0644" }
     - { src: "variables.env.j2", dest: "variables.env", mode: "0600" }
   notify: Restart overleaf

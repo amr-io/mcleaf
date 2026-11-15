@@ -18,6 +18,16 @@ send_alert() {
     fi
 }
 
+on_error() {
+    local exit_code=$?
+    local failed_line=$1
+    log "CRITICAL: Script failed at line ${failed_line} with exit code ${exit_code}!"
+    send_alert "emergency" "Disaster Recovery Aborted" \
+        "Execution crashed on line ${failed_line} (exit code ${exit_code})." \
+        "Action Required" "Inspect ~/backups/restore.log on the host for the full stack trace."
+}
+trap 'on_error ${LINENO}' ERR
+
 mkdir -p "${BACKUP_DIR}"
 log "=== Initiating Overleaf Disaster Recovery ==="
 
@@ -81,9 +91,9 @@ if ! docker exec -i mongo mongorestore --archive --gzip --drop < "${DEST}/mongo_
 fi
 
 # Restore Overleaf data and config
-tar -xzf "${DEST}/overleaf_data.tar.gz" -C "${TOOLKIT_DIR}/data" >> "${LOG_FILE}" 2>&1
+sudo tar -xzf "${DEST}/overleaf_data.tar.gz" --overwrite --same-owner -C "${TOOLKIT_DIR}/data" >> "${LOG_FILE}" 2>&1
 [ -f "${DEST}/overleaf_config.tar.gz" ] && tar -xzf "${DEST}/overleaf_config.tar.gz" -C "${TOOLKIT_DIR}" >> "${LOG_FILE}" 2>&1
-chown -R {{ ansible_user }}:{{ ansible_user }} "${TOOLKIT_DIR}/data/overleaf" "${TOOLKIT_DIR}/config"
+chown -R {{ ansible_user }}:{{ ansible_user }} "${TOOLKIT_DIR}/config"
 
 # 5. Start Service & Health Check
 docker start sharelatex >> "${LOG_FILE}" 2>&1

@@ -3,16 +3,22 @@ set -euo pipefail
 
 NOTIFY_DISCORD="{{ daemons_scripts_dir }}/notify-discord.sh"
 OUTAGE_FLAG="/dev/shm/overleaf_outage_alerted"
+DEALLOC_FLAG="/dev/shm/deallocating_in_progress"
 HOST_NAME="{{ daemons_r2_prefix }}"
+
+# 0. Suppress false alarms during intentional cloud deallocation or system shutdown
+if [ -f "${DEALLOC_FLAG}" ] || [ -f "/run/systemd/shutdown/scheduled" ]; then
+    exit 0
+fi
 
 # 1. Check Containers and HTTP Login Endpoint
 IS_DOWN=0
 REASON=""
 
-if ! docker ps | grep -q "mongo.*healthy"; then
+if ! docker ps --filter "name=^mongo$" --filter "status=running" --format '{% raw %}{{.Names}}{% endraw %}' | grep -q "^mongo$"; then
     IS_DOWN=1
-    REASON="MongoDB container is dead or unhealthy."
-elif ! docker ps | grep -q "sharelatex"; then
+    REASON="MongoDB container is stopped or crashed."
+elif ! docker ps --filter "name=^sharelatex$" --filter "status=running" --format '{% raw %}{{.Names}}{% endraw %}' | grep -q "^sharelatex$"; then
     IS_DOWN=1
     REASON="ShareLaTeX web container has stopped."
 elif ! curl -s -f -o /dev/null --connect-timeout 5 http://127.0.0.1:8000/login; then

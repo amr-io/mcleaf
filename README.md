@@ -40,17 +40,10 @@ Reliability for an academic team means never losing paper drafts and knowing imm
 ### Alert Engine Architecture
 All operational events route through [`notify-discord.sh`](ansible/roles/daemons/templates/scripts/notify-discord.sh.j2) and [`discord_payload.py`](ansible/roles/daemons/templates/scripts/discord_payload.py.j2), publishing structured JSON webhook cards tagged with dynamic environment footers (`latex-vm` in production, `latex-vm-staging` in staging):
 
-```text
-┌────────────────────────────────────────────────────────────┐
-│ 🚨 Disaster Detected: Overleaf Service Outage              │
-│ Overleaf has entered an unhealthy state on latex-vm.       │
-│                                                            │
-│ • Failure Cause: ShareLaTeX web container has stopped.     │
-│ • Action: SSH to host or trigger GitHub Disaster Recovery. │
-│                                                            │
-│ latex-vm-staging • Poland Central | Today at 11:23 AM      │
-└────────────────────────────────────────────────────────────┘
-```
+<p align="center">
+  <img src="docs/assets/discord-outage-alert.png" alt="Disaster Detected Alert" width="600" />
+</p>
+
 *(For detailed incident triage and SLA thresholds, see [**`docs/RUNBOOK.md#12-baseline-infrastructure-timings--slos`**](docs/RUNBOOK.md#12-baseline-infrastructure-timings--slos)).*
 
 ---

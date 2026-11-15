@@ -75,6 +75,10 @@ fi
 log "CRITICAL: 30 minutes of inactivity. Deallocation VM..."
 echo 0 > "${IDLE_COUNTER_FILE}"
 
+# Inhibit Disaster Watchdog so it doesn't trigger false alarms during shutdown
+touch /dev/shm/deallocating_in_progress
+systemctl stop overleaf-watchdog.timer 2>/dev/null || true
+
 # A. Discord Auto-Shutdown Notification
 sudo -u "${LATEX_USER}" -H "${SCRIPTS_DIR}/notify-discord.sh" "shutdown" \
     "Overleaf Auto-Shutdown Triggered" \

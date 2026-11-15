@@ -7,7 +7,6 @@ variable "location" {
 variable "rg_name" {
   type        = string
   description = "Name of the Resource Group"
-  default     = "latex-shared-clone"
 }
 
 variable "vm_size" {
@@ -19,7 +18,6 @@ variable "vm_size" {
 variable "dns_label" {
   type        = string
   description = "Globally unique DNS label for the public IP"
-  default     = "mc-leaf-clone"
 }
 
 variable "disk_size_gb" {
@@ -31,13 +29,12 @@ variable "disk_size_gb" {
 variable "admin_username" {
   type        = string
   description = "Admin username for the VM"
-  default     = "mc-leaf-clone"
+  default     = "latex-admin"
 }
 
 variable "vm_name" {
   type        = string
   description = "Name of the Virtual Machine"
-  default     = "latex-vm-clone"
 }
 
 variable "zone" {

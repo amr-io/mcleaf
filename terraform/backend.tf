@@ -1,7 +1,7 @@
 terraform {
   backend "s3" {
     bucket = "my-terraform-states"
-    key    = "latex-clone/terraform.tfstate"
+    key    = "mcleaf/terraform.tfstate"
     region = "us-east-1"
 
     skip_credentials_validation = true

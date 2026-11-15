@@ -69,5 +69,6 @@ backend.hcl
 # Local debug & logs
 *.log
 /scratch/
+*.zip
 
 *.secrets

@@ -100,6 +100,7 @@
     - overleaf-boot-tracker.service
     - overleaf-idle-check.service
     - overleaf-idle-check.timer
+    - overleaf-watchdog.service
     - overleaf-watchdog.timer
 
 # Notify systemd manager
@@ -108,7 +109,7 @@
     daemon_reload: true
 
 # ===== Activate background services and timers =====
-- name: Enable and activate systemd timers and serivces
+- name: Enable and activate systemd timers and services
   ansible.builtin.systemd:
     name: "{{ item }}"
     state: started
@@ -117,5 +118,4 @@
     - latex-backup.timer
     - overleaf-idle-check.timer
     - overleaf-boot-tracker.service
-    - overleaf-watchdog.service
     - overleaf-watchdog.timer

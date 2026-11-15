@@ -9,8 +9,8 @@
       tags: [common]
     - role: security
       tags: [security]
-    # - role: docker
-    #   tags: [docker]
+    - role: docker
+      tags: [docker]
     # - role: overleaf
     #   tags: [overleaf]
     # - role: nginx

@@ -1,0 +1,5 @@
+---
+docker_data_root: "/datadisk/docker"
+
+docker_users:
+  - "{{ ansible_user }}"

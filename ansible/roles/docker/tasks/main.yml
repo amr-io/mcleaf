@@ -1,0 +1,52 @@
+---
+# =============================================
+# - Install official docker engine and docker-compose
+# - Relocate data-root to the extra datadisk, grants user access
+# =============================================
+
+# ===== Install Docker =====
+# For Enterprise latest upstream engine,
+# follow steps from the official Docker docs:
+# https://docs.docker.com/engine/install/ubuntu/
+- name: Install Docker and docker-compose
+  ansible.builtin.apt:
+    name: [docker.io, docker-compose-v2]
+    state: present
+    update_cache: false
+
+# ===== Storage Relocation to /datadisk =====
+- name: Ensure Docker data-root dir exists on /datadisk
+  ansible.builtin.file:
+    path: "{{ docker_data_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0711"
+
+- name: Deploy Docker Daemon conf pointing to /datadisk
+  ansible.builtin.template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker
+
+- name: Ensure 'docker' group exists
+  ansible.builtin.group:
+    name: docker
+    state: present
+
+# ===== User Permissions & Activate Service =====
+- name: Add admin user to docker group for plain execution without 'sudo'
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: docker
+    append: true
+  loop: "{{ docker_users }}"
+
+- name: Ensure Docker systemd is running and enabled at boot
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true

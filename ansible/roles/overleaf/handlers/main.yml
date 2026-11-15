@@ -1,0 +1,7 @@
+---
+- name: Restart overleaf
+  ansible.builtin.command: bin/up -d
+  args:
+    chdir: "{{ overleaf_install_dir }}"
+  become: false
+  changed_when: true

@@ -1,4 +1,4 @@
-name: Continuous Deployment (Ansible)
+name: CD Pipeline (Ansible)
 
 on:
   push:

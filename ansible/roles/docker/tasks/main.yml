@@ -45,6 +45,10 @@
     append: true
   loop: "{{ docker_users }}"
 
+# Picks up newly assigned 'docker' group
+- name: Reset SSH connection
+  ansible.builtin.meta: reset_connection
+
 - name: Ensure Docker systemd is running and enabled at boot
   ansible.builtin.systemd:
     name: docker

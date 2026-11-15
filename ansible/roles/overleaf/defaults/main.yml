@@ -1,0 +1,17 @@
+---
+# Deployment dir
+overleaf_install_dir: "/home/{{ ansible_user }}/overleaf-toolkit"
+overleaf_repo_url: "https://github.com/overleaf/toolkit.git"
+overleaf_repo_version: "master"
+
+# Base image; upgraded to 'texlive-full' later
+overleaf_version: "5.0.4"
+
+# Application branding & URLs
+overleaf_app_name: "Mindcracked's Overleaf"
+overleaf_site_url: "http://{{ ansible_host }}:8000"
+overleaf_secure_cookie: "false" # Set to true later in Nginx role
+
+# Memory & Security tokens
+overleaf_invite_token_secret: "s25MLtMBY+Dsigg92Qjw6Yp18z5GSaKJ8/nmC6FBbFU="
+overleaf_node_options: "--max-old-space-size=256"

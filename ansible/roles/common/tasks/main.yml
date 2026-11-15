@@ -47,6 +47,7 @@
     fstype: ext4
     dev: /dev/sdb
     opts: -m 0 -E lazy_itable_init=0,lazy_journal_init=0 # Use exclusively for /data/swap and force immediate inode table init
+  when: "'/datadisk' not in (ansible_facts['mounts'] | map(attribute='mount') | list)"
 
 - name: Get filesystem UUID of /dev/sdb
   ansible.builtin.command: blkid -s UUID -o value /dev/sdb

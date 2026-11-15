@@ -2,10 +2,10 @@
 set -euo pipefail
 
 # Configuration
-BACKUP_DIR="${HOME}/backups"
-TOOLKIT_DIR="${HOME}/overleaf-toolkit"
+BACKUP_DIR="{{ daemons_backups_dir }}"
+TOOLKIT_DIR="{{ daemons_toolkit_dir }}"
 SECRETS_FILE="/etc/overleaf-secrets.env"
-R2_REMOTE_BUCKET="r2:mcleaf-backups"
+R2_REMOTE_BUCKET="{{ daemons_r2_remote_path }}"
 RETENTION_DAYS=7
 
 DATE_STAMP=$(date -u +"%Y-%m-%d_%H-%M")

@@ -5,10 +5,11 @@ set -euo pipefail
 IDLE_COUNTER_FILE="/dev/shm/idle_counter"
 LAST_BYTES_FILE="/dev/shm/last_overleaf_bytes"
 LOG_FILE="/var/log/overleaf-idle.log"
-THRESHOLD_TICKS=6	# 30 minutes
-TRAFFIC_THRESHOLD=25600	# 25 KB
-LATEX_USER="latex"
-LATEX_HOME="/home/latex"
+THRESHOLD_TICKS={{ daemons_idle_threshold_ticks }}
+TRAFFIC_THRESHOLD={{ daemons_idle_traffic_threshold_bytes }}
+LATEX_USER="{{ ansible_facts["user_id"] }}"
+LATEX_HOME="{{ ansible_facts["user_dir"] }}"
+SCRIPTS_DIR="{{ daemons_scripts_dir }}"
 
 log() {
 	echo "[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] $*" | tee -a "${LOG_FILE}"
@@ -75,17 +76,17 @@ log "CRITICAL: 30 minutes of inactivity. Deallocation VM..."
 echo 0 > "${IDLE_COUNTER_FILE}"
 
 # A. Discord Auto-Shutdown Notification
-sudo -u "${LATEX_USER}" -H "${LATEX_HOME}/scripts/notify-discord.sh" "shutdown" \
+sudo -u "${LATEX_USER}" -H "${SCRIPTS_DIR}/notify-discord.sh" "shutdown" \
     "Overleaf Auto-Shutdown Triggered" \
     "30 minutes of inactivity detected. Initiating backup and cloud deallocation." \
     "VM State" "Transitioning to Deallocated" || true
 
 # B. Off-Site Backup to CF R2
-if ! BACKUP_OUTPUT=$(sudo -u "${LATEX_USER}" -H "${LATEX_HOME}/scripts/backup-overleaf.sh" 2>&1); then
+if ! BACKUP_OUTPUT=$(sudo -u "${LATEX_USER}" -H "${SCRIPTS_DIR}/backup-overleaf.sh" 2>&1); then
 	log "WARNING: Backup script failed! Proceeding with deallocation"
 	BACKUP_SNIPPET=$(echo "${BACKUP_OUTPUT}" | tail -n 6)
 
-	sudo -u "${LATEX_USER}" -H "${LATEX_HOME}/scripts/notify-discord.sh" "warning" \
+	sudo -u "${LATEX_USER}" -H "${SCRIPTS_DIR}/notify-discord.sh" "warning" \
 		"Backup Failed!" "Cloudflare R2 backup failed after retries. Local archive is preserved." \
 		"Last Output" "\`\`\`text
 ${BACKUP_SNIPPET}
@@ -117,13 +118,13 @@ HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
 
 if [[ "${HTTP_STATUS}" =~ ^20[0-2]$ ]]; then
     log "Azure accepted deallocation request (HTTP ${HTTP_STATUS}). Fabric pulling compute."
-    sudo -u "${LATEX_USER}" -H "${LATEX_HOME}/scripts/notify-discord.sh" "success" \
+    sudo -u "${LATEX_USER}" -H "${SCRIPTS_DIR}/notify-discord.sh" "success" \
 	    "Azure Deallocation Success!" "VM is Deallocated Successfully"
     exit 0
 else
     log "CRITICAL: Azure deallocation call failed with HTTP ${HTTP_STATUS}! Rolling back containers..."
     docker start mongo redis sharelatex >> "${LOG_FILE}" 2>&1 || true
-    sudo -u "${LATEX_USER}" -H "${LATEX_HOME}/scripts/notify-discord.sh" "emergency" \
+    sudo -u "${LATEX_USER}" -H "${SCRIPTS_DIR}/notify-discord.sh" "emergency" \
         "Azure Deallocation API Failure" \
         "Azure Compute REST API returned HTTP ${HTTP_STATUS}. Containers restarted to prevent outage." \
         "Target VM" "${VM_NAME} (${RG})" || true

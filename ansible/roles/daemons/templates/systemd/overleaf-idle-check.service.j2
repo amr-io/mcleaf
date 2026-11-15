@@ -1,0 +1,9 @@
+[Unit]
+Description=Overleaf 30-Minute Inactivity and Cloud Deallocation Daemon
+After=network.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart={{ daemons_scripts_dir }}/idle-deallocate.sh
+StandardOutput=journal
+StandardError=journal

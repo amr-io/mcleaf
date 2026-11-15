@@ -1,0 +1,116 @@
+---
+# =============================================
+# Background Daemons, R2 Backups & Azure Auto-Deallocate
+# =============================================
+
+# ===== Pre-requisites & Official tools =====
+- name: Install daemon Pre-requisites (jq, iptables)
+  ansible.builtin.apt:
+    name: [jq, iptables]
+    state: present
+    update_cache: false
+
+- name: Check rclone
+  ansible.builtin.command: which rclone
+  register: daemons_rclone_check
+  failed_when: false
+  changed_when: false
+
+- name: Download official rclone installer
+  ansible.builtin.get_url:
+    url: https://rclone.org/install.sh
+    dest: /tmp/install-rclone.sh
+    mode: "0755"
+  when: daemons_rclone_check.rc != 0
+- name: Install official rclone
+  ansible.builtin.command: /tmp/install-rclone.sh
+  when: daemons_rclone_check.rc != 0
+  changed_when: true
+
+# ===== Secrets Validation Warning =====
+- name: Warn if any secrets are not configured
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Cloudflare R2 credentials or Discord Webhook URL are not fully configured.
+      Automated backups and alerts webhooks will skip execution gracefully until
+      /etc/overleaf-secrets.env is populated with valid credentials.
+  when: >
+    daemons_r2_access_key_id | length == 0 or
+    daemons_r2_secret_access_key | length == 0 or
+    daemons_r2_endpoint | length == 0 or
+    daemons_discord_webhook_url | length == 0
+
+# ===== Directory Structure Configuration =====
+- name: Create daemon scripts and backup directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  loop:
+    - "{{ daemons_backups_dir }}"
+    - "{{ daemons_scripts_dir }}"
+    - "{{ daemons_scripts_dir }}/helpers"
+
+# ===== Secrets Env File =====
+- name: Deploy overleaf-secrets.env
+  ansible.builtin.template:
+    src: configs/overleaf-secrets.env.j2
+    dest: /etc/overleaf-secrets.env
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
+
+# ===== SRE Scripts =====
+- name: Deploy SRE Operational Scripts
+  ansible.builtin.template:
+    src: "scripts/{{ item.src }}.j2"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner | default(ansible_user) }}"
+    group: "{{ item.group | default(ansible_user) }}"
+    mode: "0755"
+  loop:
+    - { src: "backup-overleaf.sh", dest: "{{ daemons_scripts_dir }}/backup-overleaf.sh" }
+    - { src: "boot-tracker.sh", dest: "{{ daemons_scripts_dir }}/boot-tracker.sh" }
+    - { src: "idle-deallocate.sh", dest: "{{ daemons_scripts_dir }}/idle-deallocate.sh", owner: root, group: root }
+    - { src: "notify-discord.sh", dest: "{{ daemons_scripts_dir }}/notify-discord.sh" }
+    - { src: "discord_payload.py", dest: "{{ daemons_scripts_dir }}/helpers/discord_payload.py" }
+
+# ==============================
+# Systemd Services & Timers
+# - latex-backup.service          # 2-hour backup oneshot service
+# - latex-backup.timer            # 2-hour backup schedule timer
+# - overleaf-boot-tracker.service # Boot Tracker service (runs at boot)
+# - overleaf-idle-check.service   # 30-minute inactivity deallocation oneshot service
+# - overleaf-idle-check.timer     # 5-minute inactivity timer with 10m boot grace
+# ==============================
+- name: Deploy systemd service and timer units
+  ansible.builtin.template:
+    src: "systemd/{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - latex-backup.service
+    - latex-backup.timer
+    - overleaf-boot-tracker.service
+    - overleaf-idle-check.service
+    - overleaf-idle-check.timer
+
+# Notify systemd manager
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+# ===== Activate background services and timers =====
+- name: Enable and activate systemd timers and serivces
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - latex-backup.timer
+    - overleaf-idle-check.timer
+    - overleaf-boot-tracker.service

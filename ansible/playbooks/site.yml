@@ -15,5 +15,5 @@
       tags: [overleaf]
     - role: nginx
       tags: [nginx]
-    # - role: daemons
-    #   tags: [daemons]
+    - role: daemons
+      tags: [daemons]

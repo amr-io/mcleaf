@@ -1,0 +1,10 @@
+[Unit]
+Description=Overleaf Inactivity Check Timer (5-minute check with 10m boot grace)
+
+[Timer]
+OnBootSec={{ daemons_idle_boot_grace }}
+OnUnitActiveSec={{ daemons_idle_check_interval }}
+Unit=overleaf-idle-check.service
+
+[Install]
+WantedBy=timers.target

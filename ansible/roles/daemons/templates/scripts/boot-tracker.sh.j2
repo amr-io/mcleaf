@@ -28,7 +28,7 @@ update_status 35 "Ubuntu kernel online. Waiting for Docker..." "System booted. D
 
 # 1. Wait for Docker engine
 while ! docker info >/dev/null 2>&1; do sleep 2; done
-update_status 50 "Docker daemon online. Mounting containers..." "$(docker ps --format 'Container: {{.Names}} ({{.Status}})')"
+update_status 50 "Docker daemon online. Mounting containers..." "$(docker ps --format 'Container: {% raw %}{{.Names}} ({{.Status}}){% endraw %}')"
 
 # 2. Wait for MongoDB to become healthy
 while ! docker ps | grep -q "mongo.*healthy"; do

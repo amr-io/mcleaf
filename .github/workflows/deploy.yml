@@ -41,7 +41,13 @@ jobs:
           EOF
       - name: Execute Ansible Playbook
         env:
+          # For now, we're using the same env secrets for both environments---should perhaps change later!
           CERTBOT_EMAIL: ${{ secrets.CERTBOT_EMAIL }}
+          DEPLOY_ENV: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           cd ansible
           ansible-playbook -i inventory/hosts.ini playbooks/site.yml

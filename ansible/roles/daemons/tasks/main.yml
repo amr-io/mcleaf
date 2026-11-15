@@ -73,6 +73,7 @@
   loop:
     - { src: "backup-overleaf.sh", dest: "{{ daemons_scripts_dir }}/backup-overleaf.sh" }
     - { src: "boot-tracker.sh", dest: "{{ daemons_scripts_dir }}/boot-tracker.sh" }
+    - { src: "restore-overleaf.sh", dest: "{{ daemons_scripts_dir }}/restore-overleaf.sh" }
     - { src: "idle-deallocate.sh", dest: "{{ daemons_scripts_dir }}/idle-deallocate.sh", owner: root, group: root }
     - { src: "notify-discord.sh", dest: "{{ daemons_scripts_dir }}/notify-discord.sh" }
     - { src: "discord_payload.py", dest: "{{ daemons_scripts_dir }}/helpers/discord_payload.py" }

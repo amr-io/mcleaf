@@ -1,8 +1,8 @@
 ---
 # Dir paths for scripts and backup archives
-daemons_scripts_dir: "{{ ansible_facts['user_dir'] }}/scripts"
-daemons_backups_dir: "{{ ansible_facts['user_dir'] }}/backups"
-daemons_toolkit_dir: "{{ ansible_facts['user_dir'] }}/overleaf-toolkit"
+daemons_scripts_dir: "/home/{{ ansible_user }}/scripts"
+daemons_backups_dir: "/home/{{ ansible_user }}/backups"
+daemons_toolkit_dir: "/home/{{ ansible_user }}/overleaf-toolkit"
 
 # ===== Configure Bucket =====
 daemons_env: "{{ lookup('env', 'DEPLOY_ENV') | default('production', true) }}"

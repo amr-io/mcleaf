@@ -36,7 +36,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ steps.repo_owner.outputs.owner }}/sharelatex:5.0.4-with-texlive-full
-            ghcr.io/${{ steps.repo_owner.outputs.owner }}/sharelatex:5.0.4-texlive-full
+            ghcr.io/${{ steps.repo_owner.outputs.owner }}/sharelatex:5.0.4-with-texlive-full
             ghcr.io/${{ steps.repo_owner.outputs.owner }}/sharelatex:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max

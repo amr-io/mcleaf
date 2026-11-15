@@ -1,4 +1,4 @@
-name: Build & Publish TeX Live Full Image to GHCR
+name: CI - Build & Publish TeX Live Full Image to GHCR
 
 on:
   push:

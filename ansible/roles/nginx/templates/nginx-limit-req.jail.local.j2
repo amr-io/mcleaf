@@ -1,0 +1,12 @@
+[nginx-limit-req]
+enabled = true
+backend = auto
+port = http,https
+filter = nginx-limit-req
+logpath = /var/log/nginx/error.log
+
+maxretry = {{ nginx_fail2ban_maxretry }}
+findtime = {{ nginx_fail2ban_findtime }}
+bantime = {{ nginx_fail2ban_bantime }}
+
+ignoreip = 127.0.0.1/8 ::1

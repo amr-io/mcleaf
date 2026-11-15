@@ -1,0 +1,50 @@
+# 10MB memory zone tracks ~160,000 unique IP states. Limit sensitive endpoints to 5 requests/sec per IP.
+limit_req_zone $binary_remote_addr zone=overleaf_auth:10m rate={{ nginx_rate_limit }};
+limit_req_status 429;
+
+server {
+    listen 80;
+    server_name {{ ansible_host }};
+
+    client_max_body_size {{ nginx_client_max_body_size }};
+
+    # Protect authentication and password endpoints against floods and brute force
+    location ~* ^/(login|register|user/password) {
+        limit_req zone=overleaf_auth burst={{ nginx_rate_limit_burst }} nodelay;
+
+        proxy_pass {{ nginx_proxy_upstream }};
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout {{ nginx_proxy_timeout }};
+        proxy_connect_timeout {{ nginx_proxy_timeout }};
+        proxy_send_timeout {{ nginx_proxy_timeout }};
+    }
+
+    # Live Boot Telemetry endpoint (serves real-time startup progress from RAM disk)
+    location = /boot-status {
+        alias /dev/shm/boot-status.json;
+        default_type application/json;
+        add_header Access-Control-Allow-Origin *;
+        add_header Cache-Control "no-store, no-cache, must-revalidate";
+    }
+
+    # Main application and WebSocket location
+    location / {
+        proxy_pass {{ nginx_proxy_upstream }};
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host $http_host;
+
+        # WebSocket support (critical for Overleaf live collaboration)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout {{ nginx_proxy_timeout }};
+        proxy_send_timeout {{ nginx_proxy_timeout }};
+    }
+}

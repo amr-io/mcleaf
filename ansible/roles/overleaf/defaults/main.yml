@@ -9,7 +9,7 @@ overleaf_version: "5.0.4"
 
 # Application branding & URLs
 overleaf_app_name: "Mindcracked's Overleaf"
-overleaf_site_url: "http://{{ ansible_host }}:8000"
+overleaf_site_url: "http://{{ ansible_host }}"
 overleaf_secure_cookie: "false" # Set to true later in Nginx role
 
 # Memory & Security tokens

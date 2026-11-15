@@ -13,7 +13,7 @@
       tags: [docker]
     - role: overleaf
       tags: [overleaf]
-    # - role: nginx
-    #   tags: [nginx]
+    - role: nginx
+      tags: [nginx]
     # - role: daemons
     #   tags: [daemons]

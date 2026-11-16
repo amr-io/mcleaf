@@ -7,6 +7,13 @@ on:
       - "docker/**"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   build-and-push:
     name: Build & Publish Image
@@ -35,7 +42,6 @@ jobs:
           file: ./docker/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ steps.repo_owner.outputs.owner }}/sharelatex:5.0.4-with-texlive-full
             ghcr.io/${{ steps.repo_owner.outputs.owner }}/sharelatex:5.0.4-with-texlive-full
             ghcr.io/${{ steps.repo_owner.outputs.owner }}/sharelatex:latest
           cache-from: type=gha

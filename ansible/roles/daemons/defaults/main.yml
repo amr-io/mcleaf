@@ -22,7 +22,7 @@ daemons_discord_webhook_url: "{{ lookup('env', 'DISCORD_WEBHOOK_URL') | default(
 
 # ===== Inactivity Tuning =====
 daemons_idle_threshold_ticks: 6
-daemons_idle_traffic_threshold_bytes: 25600
+daemons_idle_traffic_threshold_bytes: 65536
 daemons_idle_check_interval: "5min"
 daemons_idle_boot_grace: "10min"
 

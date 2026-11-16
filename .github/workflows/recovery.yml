@@ -28,6 +28,6 @@ jobs:
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
-          BACKUP_ARCHIVE: ${{ inputs.BACKUP_ARCHIVE }}
+          BACKUP_ARCHIVE: ${{ inputs.backup_archive }}
         run: |
           ssh -i ~/.ssh/id_rsa ${VM_USER}@${VM_HOST} "sudo -u ${VM_USER} -H /home/${VM_USER}/scripts/restore-overleaf.sh '${BACKUP_ARCHIVE}'"

@@ -27,5 +27,5 @@ resource "azurerm_role_assignment" "identity" {
   description          = "Access Permission for auto deallocate."
   principal_id         = azurerm_linux_virtual_machine.vm.identity[0].principal_id
   role_definition_name = "Virtual Machine Contributor"
-  scope                = azurerm_resource_group.rg.id
+  scope                = azurerm_linux_virtual_machine.vm.id
 }

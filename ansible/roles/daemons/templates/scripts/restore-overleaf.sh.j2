@@ -41,7 +41,7 @@ else
 fi
 
 # 2. Resolve Target Archive (Parameter -> R2 Latest -> Local Latest)
-TARGET="${1:-$(rclone lsf --sort time --reverse "${R2_REMOTE_BUCKET}/" 2>/dev/null | grep -E '^overleaf-backup-.*\.tar\.gz$' | head -n 1 || true)}"
+TARGET="${1:-$(rclone lsf "${R2_REMOTE_BUCKET}/" 2>/dev/null | grep -E '^overleaf-backup-.*\.tar\.gz$' | sort -r | head -n 1 || true)}"
 if [ -z "${TARGET}" ]; then
     TARGET=$(ls -t "${BACKUP_DIR}"/overleaf-backup-*.tar.gz 2>/dev/null | head -n 1 | xargs -r basename || true)
 fi
@@ -99,7 +99,7 @@ chown -R {{ ansible_user }}:{{ ansible_user }} "${TOOLKIT_DIR}/config"
 docker start sharelatex >> "${LOG_FILE}" 2>&1
 log "Running health check on http://127.0.0.1:8000/login..."
 HEALTHY=0
-for i in {1..30}; do
+for i in {1..60}; do
     if curl -s -f -o /dev/null http://127.0.0.1:8000/login; then HEALTHY=1; break; fi
     sleep 2
 done

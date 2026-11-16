@@ -13,6 +13,5 @@ overleaf_app_name: "Mindcracked's Overleaf"
 overleaf_site_url: "http://{{ ansible_host }}"
 overleaf_secure_cookie: "false" # Set to true later in Nginx role
 
-# Memory & Security tokens
-overleaf_invite_token_secret: "s25MLtMBY+Dsigg92Qjw6Yp18z5GSaKJ8/nmC6FBbFU="
+# Memory
 overleaf_node_options: "--max-old-space-size=256"

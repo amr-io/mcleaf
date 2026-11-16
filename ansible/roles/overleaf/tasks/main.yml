@@ -22,6 +22,13 @@
     group: "{{ ansible_user }}"
     mode: "0755"
 
+- name: Create Overleaf invite secret
+  ansible.builtin.shell: |
+    val=$(grep -m 1 '^OVERLEAF_INVITE_TOKEN_SECRET=' {{ overleaf_install_dir }}/config/variables.env 2>/dev/null | cut -d= -f2-)
+    echo "${val:-$(openssl rand -base64 32)}"
+  register: overleaf_token
+  changed_when: false
+
 # ===== Deploy production conf & Memory clamps =====
 - name: Deploy Overleaf conf templates
   ansible.builtin.template:

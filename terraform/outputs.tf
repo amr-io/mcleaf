@@ -20,7 +20,7 @@ output "vm_principal_id" {
 
 output "ssh_command" {
   description = "Command to SSH directly into the VM"
-  value       = "ssh -i id_rsa.pem ${var.admin_username}@${azurerm_public_ip.pubip.ip_address}"
+  value       = "ssh -i id_rsa_${terraform.workspace}.pem ${var.admin_username}@${azurerm_public_ip.pubip.ip_address}"
 }
 
 output "ssh_private_key_pem" {

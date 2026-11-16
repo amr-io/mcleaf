@@ -291,3 +291,32 @@ sudo systemctl start overleaf-idle-check.timer
 | **Nginx Logs** | `/var/log/nginx/` | `sudo tail -f /var/log/nginx/error.log /var/log/nginx/access.log` |
 | **Fail2Ban Jail Status** | `nginx-limit-req` | `sudo fail2ban-client status nginx-limit-req` |
 | **Swap & ZRAM Status** | `/dev/zram0`, `/datadisk/swapfile` | `zramctl && swapon --show && free -h` |
+
+---
+
+## 6. Technical Debt & Planned Improvements (Later Work)
+
+Tracked architectural enhancements, security hardening, and operational refactoring to be implemented in upcoming iterations:
+
+### 6.1 Least-Privilege IAM Scoping for VM Managed Identity
+- **Area:** Infrastructure as Code / Azure IAM (`terraform/roles.tf`)
+- **Current State:** The VM Managed Identity is assigned `Virtual Machine Contributor` over the entire Resource Group (`azurerm_resource_group.rg.id`) so it can deallocate itself during idle shutdown.
+- **Risk:** Compromise of any container or process with metadata access grants full control over the resource group (deleting/modifying other resources and disks).
+- **Target Implementation:**
+  - Scope the role assignment strictly down to the VM resource ID: `scope = azurerm_linux_virtual_machine.vm.id`.
+  - Alternatively, author a custom Azure IAM role granting only `Microsoft.Compute/virtualMachines/deallocate/action` and `Microsoft.Compute/virtualMachines/read`.
+
+### 6.2 Nginx Template Idempotency & Certbot Decoupling
+- **Area:** Configuration Management (`ansible/roles/nginx/`)
+- **Current State:** The task `Deploy Nginx reverse proxy conf` is guarded by `when: not nginx_ssl_cert.stat.exists` to avoid overwriting Certbot's mutated configuration.
+- **Risk:** Configuration drift. Any subsequent updates to `overleaf.j2` (rate limiting, proxy timeouts, client payload limits) are silently skipped on all provisioned hosts.
+- **Target Implementation:**
+  - Switch Certbot from `--nginx` to `certbot certonly --nginx` (authenticator only).
+  - Use Jinja2 conditionals (`{% if nginx_ssl_cert.stat.exists %}`) within `overleaf.j2` to conditionally toggle between initial HTTP validation and full HTTPS proxying, allowing Ansible to remain the sole source of truth for `/etc/nginx/sites-available/overleaf`.
+
+### 6.3 Decouple SSH Private Key Material from Terraform State
+- **Area:** Security & Secrets Management (`terraform/keys.tf`)
+- **Current State:** Terraform generates the administrative SSH key pair via `tls_private_key.ssh` and writes it to disk with `local_file`.
+- **Risk:** Unencrypted private key material is stored in plaintext within remote backend state (`terraform.tfstate` in Cloudflare R2), exposing host root access to any identity with state read permissions.
+- **Target Implementation:**
+  - Pre-generate operational SSH key pairs outside Terraform, store private keys in Azure Key Vault or GitHub Secrets, and supply only the public key to `azurerm_linux_virtual_machine.admin_ssh_key`.

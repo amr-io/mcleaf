@@ -1,11 +1,18 @@
 name: CI - Build & Publish TeX Live Full Image to GHCR
 
 on:
-  push:
-    branches: [main, dev]
-    paths:
-      - "docker/**"
+  workflow_call:
+    inputs:
+      force_rebuild:
+        description: "Rebuild even if GHCR has the same version"
+        type: boolean
+        default: false
   workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: "Rebuild even if GHCR has the same version"
+        type: boolean
+        default: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -21,28 +28,92 @@ jobs:
     permissions:
       contents: read
       packages: write
+      security-events: write
 
     steps:
       - uses: actions/checkout@v7
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+      - name: Read versions.yml
+        id: versions
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          ver=$(yq -r '.overleaf_version' versions.yml)
+          tag="${ver}-$(yq -r '.overleaf_image_suffix' versions.yml)"
+          repo="ghcr.io/${OWNER,,}/sharelatex"
+          cat <<EOF >> "$GITHUB_OUTPUT"
+          overleaf_version=${ver}
+          image_tag=${tag}
+          texlive_repo=$(yq -r '.texlive_repo // ""' versions.yml)
+          image_repo=${repo}
+          image_ref=${repo}:${tag}
+          EOF
       - name: Login to GHCR
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Lowercase repo owner
-        id: repo_owner
-        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      - name: Check if tag already exists in GHCR
+        id: check
+        env:
+          FORCE_REBUILD: ${{ inputs.force_rebuild }}
+          IMAGE_REF: ${{ steps.versions.outputs.image_ref }}
+        run: |
+          if [ "${FORCE_REBUILD}" != "true" ] && docker manifest inspect "${IMAGE_REF}" > /dev/null 2>&1; then
+            echo "Tag ${IMAGE_REF} already exists in GHCR. Skipping build."
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Building ${IMAGE_REF} (force_rebuild=${FORCE_REBUILD})..."
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.should_build == 'true'
+        uses: docker/setup-buildx-action@v4
+
+      - name: Generate Docker metadata
+        if: steps.check.outputs.should_build == 'true'
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.versions.outputs.image_repo }}
+          tags: |
+            type=raw,value=${{ steps.versions.outputs.image_tag }}
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: org.opencontainers.image.version=${{ steps.versions.outputs.overleaf_version }}
+
       - name: Build and push Docker Image
+        if: steps.check.outputs.should_build == 'true'
         uses: docker/build-push-action@v7
         with:
           context: ./docker
           file: ./docker/Dockerfile
           push: true
-          tags: |
-            ghcr.io/${{ steps.repo_owner.outputs.owner }}/sharelatex:5.0.4-with-texlive-full
-            ghcr.io/${{ steps.repo_owner.outputs.owner }}/sharelatex:latest
+          build-args: |
+            OVERLEAF_VERSION=${{ steps.versions.outputs.overleaf_version }}
+            TEXLIVE_REPO=${{ steps.versions.outputs.texlive_repo }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Scan published image with Trivy
+        if: steps.check.outputs.should_build == 'true'
+        uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          image-ref: ${{ steps.versions.outputs.image_ref }}
+          format: sarif
+          output: "trivy-results.sarif"
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+        continue-on-error: true
+
+      - name: Upload Trivy results to Security tab
+        if: steps.check.outputs.should_build == 'true'
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: "trivy-results.sarif"

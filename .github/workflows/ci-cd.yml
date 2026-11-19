@@ -13,7 +13,6 @@ concurrency:
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   lint-terraform:
@@ -53,6 +52,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      security-events: write
+
     
   deploy:
     name: Configure Azure VM via Ansible

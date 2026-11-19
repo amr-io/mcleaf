@@ -1,0 +1,17 @@
+---
+# Single Source of Truth for MCLeaf runtime & container versions.
+# Updating overleaf_version here triggers a GHCR build
+# and deploys the new image via Ansible
+
+overleaf_version: "5.0.4"
+overleaf_image_suffix: "with-texlive-full"
+
+# Leave empty ("") for default ctan mirror
+texlive_repo: "https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2023/tlnet-final"
+
+# TODO: pin to a commit SHA
+overleaf_toolkit_ref: "master"
+
+# Must match Overleaf's supported versions for the release above
+mongo_version: "6.0"
+redis_version: "7.4"

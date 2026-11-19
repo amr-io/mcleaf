@@ -2,11 +2,11 @@
 # Deployment dir
 overleaf_install_dir: "/home/{{ ansible_user }}/overleaf-toolkit"
 overleaf_repo_url: "https://github.com/overleaf/toolkit.git"
-overleaf_repo_version: "master"
+overleaf_repo_version: "{{ overleaf_toolkit_ref }}"
 
 # Container image & version
 overleaf_image_name: "ghcr.io/amr-io/sharelatex"
-overleaf_version: "5.0.4-with-texlive-full"
+overleaf_image_tag: "{{ overleaf_version }}-{{ overleaf_image_suffix }}"
 
 # Application branding & URLs
 overleaf_app_name: "Mindcracked's Overleaf"

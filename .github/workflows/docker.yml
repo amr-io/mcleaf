@@ -15,7 +15,7 @@ on:
         default: true
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: docker-build-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:

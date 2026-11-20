@@ -91,18 +91,21 @@ systemctl show latex-backup.service -p Result,ExecMainStatus
    ```yaml
    overleaf_version: "<new-version>"
    overleaf_image_suffix: "with-texlive-full"
+   texlive_repo: "<compatible-texlive-repository>"
    overleaf_toolkit_ref: "<compatible-toolkit-ref>"
    mongo_version: "<compatible-mongo-version>"
    redis_version: "<compatible-redis-version>"
    ```
 
-   Change only the fields required for the upgrade. The image tag is derived as `<overleaf_version>-<overleaf_image_suffix>`, while Ansible uses `overleaf_toolkit_ref` to check out the toolkit and `overleaf_image_tag` to select the running container.
+   Change only the fields required for the upgrade. The image tag is derived as `<overleaf_version>-<overleaf_image_suffix>`, while the Docker build uses `texlive_repo` and Ansible uses `overleaf_toolkit_ref` to check out the toolkit and `overleaf_image_tag` to select the running container.
 
-2. **Validate the Pull Request:** Let CI run the Terraform, Ansible, build, and Trivy checks. A pull request does not deploy to staging.
+2. **Validate the Pull Request:** Let CI run the Terraform formatting/validation and Ansible lint jobs. The image build, Trivy scan, and deployment jobs are skipped for pull requests and run after a push or merge to `dev` or `main`; a pull request does not deploy to staging.
 
 3. **Build and Deploy to Staging:** Merge or push the version-bump PR to `dev`. The CI/CD workflow builds or reuses `ghcr.io/amr-io/sharelatex:<overleaf_version>-<overleaf_image_suffix>`, scans it with Trivy, and then deploys to `LATEX-SHARED-CLONE`.
 
    Before changing an existing deployment, the Overleaf Ansible role starts `latex-backup.service` when the current `config/version` differs from the new image tag. Confirm the result and run the manual pre-change backup from **SOP-03** if you need an on-demand snapshot.
+
+   The deployment keeps the current and previous `ghcr.io/amr-io/sharelatex` images (N-1 retention) and prunes other unused images. The scheduled `version-check.yml` workflow also checks Docker Hub weekly, sends a Discord notification when an update is available, and can be run manually with **workflow_dispatch**.
 
 4. **Verify Staging:** Check the running image and application health:
 
@@ -118,7 +121,7 @@ systemctl show latex-backup.service -p Result,ExecMainStatus
 **Rollback**
 
 - **Before promotion:** Close or revert the version-bump PR on `dev`, then confirm the staging deployment is back at the previous image and passes `/login` plus a sample compile.
-- **After promotion:** Revert `versions.yml` to the last known-good values in a new PR on `dev`, merge it, and let the normal build-backup-deploy-verify pipeline return staging to that version.
+- **After promotion:** Revert `versions.yml` to the last known-good values on `dev`, open and merge a revert PR to promote it through staging and then to `main`, or revert the values directly on `main` if an emergency rollback is approved. Let the normal build-backup-deploy-verify pipeline run for the restored staging version and the restored production version.
 - If the reverted release fails or data compatibility is uncertain, restore a pre-upgrade R2 or local backup using the **Disaster Recovery** procedures in this runbook. Do not restore data while the application is running.
 
 ### SOP-05: Creating Overleaf Users or Admins

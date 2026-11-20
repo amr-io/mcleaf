@@ -173,7 +173,10 @@ Because `Standard_B2ats_v2` has limited RAM, the `common` Ansible role (`ansible
 │   ├── ci.yml                     # Terraform fmt/validate & Ansible lint checks
 │   ├── deploy.yml                 # Deploys dev -> staging and main -> production
 │   ├── docker.yml                 # Builds and pushes the custom TeX Live Full Overleaf image
+│   ├── version-check.yml          # Weekly and manual Overleaf release checks with Discord notifications
 │   └── recovery.yml               # Manual workflow_dispatch job for 1-click R2 restore
+├── .github/scripts/
+│   └── check_overleaf_version.py  # Compares the versions.yml Overleaf release to Docker Hub
 ├── ansible/
 │   ├── ansible.cfg                # SSH pipelining and role path settings
 │   ├── requirements.yml           # Ansible Galaxy collection dependencies

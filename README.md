@@ -76,7 +76,7 @@ flowchart TB
             end
 
             subgraph Containers["Docker Engine (Overlay2 on 64GB OS SSD)"]
-                Overleaf["Overleaf CE v5.0.4 (127.0.0.1:8000)<br/>ghcr.io/amr-io/sharelatex:5.0.4-with-texlive-full"]
+                Overleaf["Overleaf CE v5.0.4 (127.0.0.1:8000)<br/>ghcr.io/amr-io/sharelatex:5.0.4-with-texlive-full<br/>(from versions.yml)"]
                 Mongo["MongoDB 6.0<br/>(WiredTiger Engine)"]
                 Redis["Redis 7.4<br/>(In-Memory + Snapshots)"]
             end
@@ -118,7 +118,7 @@ flowchart TB
 | :--- | :--- | :--- | :--- | :--- |
 | **Compute** | Azure Linux VM | `Standard_B2ats_v2` (2 vCPU) | Burstable host running in `polandcentral` | `main.tf`, `variables.tf` |
 | **Storage** | OS SSD + Data SSD | $64\text{ GB}$ OS + $64\text{ GB}$ `/dev/sdb` | Separates disposable OS/Docker layers from persistent `/datadisk` state | `main.tf`, `ansible/roles/common` |
-| **Application** | Overleaf CE + TeX Live | `v5.0.4` (`texlive-full`) | Web editor, real-time sync, and full LaTeX compilation suite on port `8000` | `docker/Dockerfile`, `ansible/roles/overleaf` |
+| **Application** | Overleaf CE + TeX Live | `v5.0.4` (`texlive-full`; sourced from `versions.yml`) | Web editor, real-time sync, and full LaTeX compilation suite on port `8000` | `versions.yml`, `docker/Dockerfile`, `ansible/roles/overleaf` |
 | **Database** | MongoDB | `6.0` (WiredTiger) | Stores users, project metadata, and document structure | `ansible/roles/overleaf` |
 | **Cache** | Redis | `7.4` | Handles active sessions, collaborative cursor pub/sub, and locks | `ansible/roles/overleaf` |
 | **Reverse Proxy** | Nginx + Certbot + Fail2Ban | Mainline / TLS 1.3 | Terminates HTTPS, upgrades WebSockets, and blocks request floods | `ansible/roles/nginx`, `ansible/roles/security` |
@@ -173,7 +173,10 @@ Because `Standard_B2ats_v2` has limited RAM, the `common` Ansible role (`ansible
 │   ├── ci.yml                     # Terraform fmt/validate & Ansible lint checks
 │   ├── deploy.yml                 # Deploys dev -> staging and main -> production
 │   ├── docker.yml                 # Builds and pushes the custom TeX Live Full Overleaf image
+│   ├── version-check.yml          # Weekly and manual Overleaf release checks with Discord notifications
 │   └── recovery.yml               # Manual workflow_dispatch job for 1-click R2 restore
+├── .github/scripts/
+│   └── check_overleaf_version.py  # Compares the versions.yml Overleaf release to Docker Hub
 ├── ansible/
 │   ├── ansible.cfg                # SSH pipelining and role path settings
 │   ├── requirements.yml           # Ansible Galaxy collection dependencies
@@ -190,7 +193,8 @@ Because `Standard_B2ats_v2` has limited RAM, the `common` Ansible role (`ansible
 │       ├── nginx/                 # Certbot TLS, WebSocket proxy, /boot-status.json route, rate limits
 │       └── daemons/               # SRE scripts (boot-tracker, idle-deallocate, backup, restore, Discord)
 ├── docker/
-│   └── Dockerfile                 # Builds ghcr.io/amr-io/sharelatex:5.0.4-with-texlive-full
+│   └── Dockerfile                 # Builds the image tag derived from versions.yml
+├── versions.yml                   # Single source of truth for release, toolkit, MongoDB, and Redis versions
 ├── docs/
 │   ├── ARCHITECTURE.md            # Deep dive into system design, traffic flows, and storage tiers
 │   └── RUNBOOK.md                 # Day-2 operations, incident playbooks, and DR guide

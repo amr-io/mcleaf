@@ -1,0 +1,28 @@
+name: Scheduled - Overleaf Version Check
+
+on:
+  schedule:
+    # 09:00 on Monday
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+  push: # Temp, Remove before PR
+    branches: dev
+
+concurrency:
+  group: version-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check-ver:
+    name: Check Overleaf latest version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check Overleaf CE version
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL_NOTIF }}
+        run: python3 .github/scripts/check_overleaf_version.py versions.yml ${{ github.event_name }}

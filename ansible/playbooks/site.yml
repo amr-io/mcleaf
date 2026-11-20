@@ -3,6 +3,8 @@
   hosts: webservers
   become: true
   gather_facts: true
+  vars_files:
+    - ../../versions.yml
 
   roles:
     - role: common

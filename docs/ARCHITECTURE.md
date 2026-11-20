@@ -13,6 +13,8 @@ MCLeaf is built around four core design principles:
 3. **Software & Kernel Tuning Over Hardware Sizing:** Rather than over-provisioning an expensive VM to absorb TeX Live's $150,000+$ font/macro files and heavy `pdflatex` compilation bursts, MCLeaf pairs `lz4`-compressed `zram`, an $8\text{ GB}$ dedicated disk swapfile, and VFS inode cache tuning (`vm.vfs_cache_pressure=50`) on a compact 2-vCPU burstable node (`Standard_B2ats_v2`).
 4. **GitOps & Multi-Environment Isolation:** Infrastructure (`*.tf`), OS configuration (`ansible/roles/*`), and operational scripts are version-controlled and verified on `staging` (`LATEX-SHARED-CLONE`) before gated promotion to `production` (`LATEX-SHARED`).
 
+Runtime and container versions are defined in [`../versions.yml`](../versions.yml). That file is loaded into Ansible, so the current Overleaf release is `5.0.4` with image tag `5.0.4-with-texlive-full`; the toolkit, MongoDB, and Redis pins in the same file must remain compatible.
+
 ---
 
 ## 2. C4 Container Diagram
@@ -48,7 +50,7 @@ flowchart TB
         end
 
         subgraph DockerNet["Docker Network (overleaf_default)"]
-            Sharelatex["Overleaf CE (sharelatex)<br/>[ghcr.io/amr-io/sharelatex:5.0.4-with-texlive-full]<br/>Listens on 127.0.0.1:8000 | Runit services:<br/>web, real-time, clsi, document-updater, filestore"]
+            Sharelatex["Overleaf CE (sharelatex)<br/>[ghcr.io/amr-io/sharelatex:5.0.4-with-texlive-full<br/>from versions.yml]<br/>Listens on 127.0.0.1:8000 | Runit services:<br/>web, real-time, clsi, document-updater, filestore"]
             Mongo["MongoDB 6.0 (mongo)<br/>[WiredTiger Engine]<br/>Project metadata, users, doc history"]
             Redis["Redis 7.4 (redis)<br/>[In-Memory Store]<br/>Sessions, cursor sync pub/sub, locks"]
         end

@@ -84,10 +84,45 @@ systemctl show latex-backup.service -p Result,ExecMainStatus
 
 ### SOP-04: Upgrading Overleaf CE or the TeX Live Container
 
-1. **Build the Image:** Update the base version in `docker/Dockerfile` and run `.github/workflows/docker.yml` to build and push `ghcr.io/amr-io/sharelatex:<version>-with-texlive-full`.
-2. **Bump Ansible Defaults:** Update `ansible/roles/overleaf/templates/version.j2` and `ansible/roles/overleaf/defaults/main.yml` on the `dev` branch.
-3. **Test in Staging:** Push to `dev` and let `.github/workflows/deploy.yml` update `latex-vm-clone`. Verify `/login` and test a sample LaTeX compile.
-4. **Promote to Production:** Open a PR from `dev` to `main`, merge, and approve the production deployment gate.
+`versions.yml` is the single source of truth for runtime and container versions. Do not update the Dockerfile or Ansible role defaults directly for a normal image upgrade.
+
+1. **Create a Separate Version-Bump PR:** On `dev`, update the relevant value in `versions.yml`:
+
+   ```yaml
+   overleaf_version: "<new-version>"
+   overleaf_image_suffix: "with-texlive-full"
+   texlive_repo: "<compatible-texlive-repository>"
+   overleaf_toolkit_ref: "<compatible-toolkit-ref>"
+   mongo_version: "<compatible-mongo-version>"
+   redis_version: "<compatible-redis-version>"
+   ```
+
+   Change only the fields required for the upgrade. The image tag is derived as `<overleaf_version>-<overleaf_image_suffix>`, while the Docker build uses `texlive_repo` and Ansible uses `overleaf_toolkit_ref` to check out the toolkit and `overleaf_image_tag` to select the running container.
+
+2. **Validate the Pull Request:** Let CI run the Terraform formatting/validation and Ansible lint jobs. The image build, Trivy scan, and deployment jobs are skipped for pull requests and run after a push or merge to `dev` or `main`; a pull request does not deploy to staging.
+
+3. **Build and Deploy to Staging:** Merge or push the version-bump PR to `dev`. The CI/CD workflow builds or reuses `ghcr.io/amr-io/sharelatex:<overleaf_version>-<overleaf_image_suffix>`, scans it with Trivy, and then deploys to `LATEX-SHARED-CLONE`.
+
+   Before changing an existing deployment, the Overleaf Ansible role starts `latex-backup.service` when the current `config/version` differs from the new image tag. Confirm the result and run the manual pre-change backup from **SOP-03** if you need an on-demand snapshot.
+
+   The deployment keeps the current and previous `ghcr.io/amr-io/sharelatex` images (N-1 retention) and prunes other unused images. The scheduled `version-check.yml` workflow also checks Docker Hub weekly, sends a Discord notification when an update is available, and can be run manually with **workflow_dispatch**.
+
+4. **Verify Staging:** Check the running image and application health:
+
+   ```bash
+   sudo docker inspect --format '{{.Config.Image}}' sharelatex
+   curl -I http://127.0.0.1:8000/login
+   ```
+
+   From the staging host, confirm the login page returns `HTTP 200` or `302`, open a project, and test a small LaTeX compile. The Ansible role independently fails if the running image differs from `overleaf_image_tag` or if the web service does not become responsive.
+
+5. **Promote to Production:** Open a PR from `dev` to `main` only after staging is verified. Merge it after review and approval; the production deployment requires the GitHub Actions production environment approval.
+
+**Rollback**
+
+- **Before promotion:** Close or revert the version-bump PR on `dev`, then confirm the staging deployment is back at the previous image and passes `/login` plus a sample compile.
+- **After promotion:** Revert `versions.yml` to the last known-good values on `dev`, open and merge a revert PR to promote it through staging and then to `main`, or revert the values directly on `main` if an emergency rollback is approved. Let the normal build-backup-deploy-verify pipeline run for the restored staging version and the restored production version.
+- If the reverted release fails or data compatibility is uncertain, restore a pre-upgrade R2 or local backup using the **Disaster Recovery** procedures in this runbook. Do not restore data while the application is running.
 
 ### SOP-05: Creating Overleaf Users or Admins
 
@@ -291,32 +326,3 @@ sudo systemctl start overleaf-idle-check.timer
 | **Nginx Logs** | `/var/log/nginx/` | `sudo tail -f /var/log/nginx/error.log /var/log/nginx/access.log` |
 | **Fail2Ban Jail Status** | `nginx-limit-req` | `sudo fail2ban-client status nginx-limit-req` |
 | **Swap & ZRAM Status** | `/dev/zram0`, `/datadisk/swapfile` | `zramctl && swapon --show && free -h` |
-
----
-
-## 6. Technical Debt & Planned Improvements (Later Work)
-
-Tracked architectural enhancements, security hardening, and operational refactoring to be implemented in upcoming iterations:
-
-### 6.1 Least-Privilege IAM Scoping for VM Managed Identity
-- **Area:** Infrastructure as Code / Azure IAM (`terraform/roles.tf`)
-- **Current State:** The VM Managed Identity is assigned `Virtual Machine Contributor` over the entire Resource Group (`azurerm_resource_group.rg.id`) so it can deallocate itself during idle shutdown.
-- **Risk:** Compromise of any container or process with metadata access grants full control over the resource group (deleting/modifying other resources and disks).
-- **Target Implementation:**
-  - Scope the role assignment strictly down to the VM resource ID: `scope = azurerm_linux_virtual_machine.vm.id`.
-  - Alternatively, author a custom Azure IAM role granting only `Microsoft.Compute/virtualMachines/deallocate/action` and `Microsoft.Compute/virtualMachines/read`.
-
-### 6.2 Nginx Template Idempotency & Certbot Decoupling
-- **Area:** Configuration Management (`ansible/roles/nginx/`)
-- **Current State:** The task `Deploy Nginx reverse proxy conf` is guarded by `when: not nginx_ssl_cert.stat.exists` to avoid overwriting Certbot's mutated configuration.
-- **Risk:** Configuration drift. Any subsequent updates to `overleaf.j2` (rate limiting, proxy timeouts, client payload limits) are silently skipped on all provisioned hosts.
-- **Target Implementation:**
-  - Switch Certbot from `--nginx` to `certbot certonly --nginx` (authenticator only).
-  - Use Jinja2 conditionals (`{% if nginx_ssl_cert.stat.exists %}`) within `overleaf.j2` to conditionally toggle between initial HTTP validation and full HTTPS proxying, allowing Ansible to remain the sole source of truth for `/etc/nginx/sites-available/overleaf`.
-
-### 6.3 Decouple SSH Private Key Material from Terraform State
-- **Area:** Security & Secrets Management (`terraform/keys.tf`)
-- **Current State:** Terraform generates the administrative SSH key pair via `tls_private_key.ssh` and writes it to disk with `local_file`.
-- **Risk:** Unencrypted private key material is stored in plaintext within remote backend state (`terraform.tfstate` in Cloudflare R2), exposing host root access to any identity with state read permissions.
-- **Target Implementation:**
-  - Pre-generate operational SSH key pairs outside Terraform, store private keys in Azure Key Vault or GitHub Secrets, and supply only the public key to `azurerm_linux_virtual_machine.admin_ssh_key`.

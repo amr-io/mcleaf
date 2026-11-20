@@ -6,12 +6,12 @@
 # =============================================
 
 # ===== Clone Toolkit & Prepare config dir =====
-- name: Clone Overleaf CE toolkit repo
+- name: Clone/Update Overleaf CE toolkit repo
   ansible.builtin.git:
     repo: "{{ overleaf_repo_url }}"
     dest: "{{ overleaf_install_dir }}"
     version: "{{ overleaf_repo_version }}"
-    update: false
+    update: true
   become: false
 
 - name: Ensure Overleaf conf dir exists
@@ -32,6 +32,32 @@
   register: overleaf_token
   changed_when: false
   no_log: true
+
+# ===== Pre-Upgrade Safety Backup =====
+- name: Check if 'version' file exists
+  ansible.builtin.stat:
+    path: "{{ overleaf_install_dir }}/config/version"
+  register: overleaf_version_file
+
+- name: Read current version
+  ansible.builtin.slurp:
+    src: "{{ overleaf_install_dir }}/config/version"
+  register: overleaf_current_version_raw
+  when: overleaf_version_file.stat.exists
+
+- name: Check backup systemd
+  ansible.builtin.stat:
+    path: /etc/systemd/system/latex-backup.service
+  register: overleaf_backup_service
+
+- name: Backup data
+  ansible.builtin.systemd_service:
+    name: latex-backup.service
+    state: started
+  when:
+    - overleaf_version_file.stat.exists
+    - overleaf_backup_service.stat.exists
+    - (overleaf_current_version_raw.content | b64decode | trim) != overleaf_image_tag
 
 # ===== Deploy production conf & Memory clamps =====
 - name: Deploy Overleaf conf templates
@@ -60,6 +86,22 @@
   become: false
   changed_when: false
 
+# ===== Version Verification =====
+- name: Inspect running container version
+  ansible.builtin.command: docker inspect --format '{% raw %}{{.Config.Image}}{% endraw %}' sharelatex
+  register: overleaf_running_image
+  changed_when: false
+  become: false
+
+- name: Verify version match
+  ansible.builtin.assert:
+    that:
+      - (overleaf_running_image.stdout | trim) == (overleaf_image_name ~ ':' ~ overleaf_image_tag)
+    fail_msg: >-
+      Version mismatch! Expected {{ overleaf_image_name }}:{{ overleaf_image_tag }},
+      got {{ overleaf_running_image.stdout | trim }}.
+    success_msg: "Verified running ShareLaTeX image: {{ overleaf_running_image.stdout | trim }}"
+
 # ===== Healthcheck =====
 # Overleaf microservices: 12 Node processes, Mongo, Redis
 - name: Wait for Overleaf web service to become responsive
@@ -74,3 +116,15 @@
 - name: Display Overleaf probe status
   ansible.builtin.debug:
     msg: "Overleaf responded with HTTP {{ overleaf_probe.status }}"
+
+# ===== Prune N-1 Images - Retain current and previous images =====
+- name: Prune unused Docker images
+  ansible.builtin.shell: |
+    set -eo pipefail
+    docker images -q "{{ overleaf_image_name }}" | uniq | tail -n +3 | xargs -r docker rmi
+    docker image prune -f
+  args:
+    executable: /bin/bash
+  register: overleaf_docker_prune
+  changed_when: "'Deleted:' in overleaf_docker_prune.stdout or 'Total reclaimed space: 0B' not in overleaf_docker_prune.stdout"
+  become: false

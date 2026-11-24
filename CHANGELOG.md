@@ -5,5 +5,4 @@
 
 ### Features
 
-* **ci:** automate SemVer releases with release-please and decouple webhook notifications ([4005998](https://github.com/amr-io/mcleaf/commit/40059989938152f42521c95f48bba441c526ea68))
 * **ci:** automate SemVer releases with release-please and decouple webhook notifications ([c75dfb9](https://github.com/amr-io/mcleaf/commit/c75dfb94e28ad1c598758655452a31d8b9cf582e))

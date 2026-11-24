@@ -1,0 +1,46 @@
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+name: release-please
+
+jobs:
+  release-please:
+    name: Cut Release & Changelog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+        id: release
+      
+      - uses: actions/checkout@v7
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+
+      - name: Notify Webhook
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL_NOTIF }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          URL: ${{ steps.release.outputs.html_url }}
+        run: |
+          TYPE="success"
+          python3 .github/scripts/webhook_notify.py \
+          --title "New Release" \
+          --description "A new version has been released on GitHub: \`${TAG_NAME}\`" \
+          --field "Release Notes=[Release Notes](${URL})" \
+          --footer "MCLeaf • Release Notifications" \
+          --url "${URL}" \
+          --type "${TYPE}"

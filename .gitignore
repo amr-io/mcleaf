@@ -45,7 +45,7 @@ terraform.rc
 # planout
 
 # Local dumps and terraform outputs
-*.json
+terraform/outputs_*.json
 
 # Private keys and certificates
 *.pem
@@ -72,3 +72,4 @@ backend.hcl
 *.zip
 
 *.secrets
+.vscode

@@ -1,6 +1,5 @@
 import json, os, re, sys, urllib.request
 from pathlib import Path
-from datetime import datetime, timezone
 
 DOCKER_HUB_URL = "https://hub.docker.com/v2/namespaces/sharelatex/repositories/sharelatex/tags?page_size=100"
 SEMVER = re.compile(
@@ -40,70 +39,7 @@ def classify_bump(cur: tuple[int, int, int], lat: tuple[int, int, int]) -> str:
     return "PATCH"
 
 
-def send_discord_notif(webhook_url, current, latest, bump, trigger):
-    is_major = bump == "MAJOR"
-    color = 15844367 if is_major else 3447003  # Amber for MAJOR, Blue otherwise
-    note = None
-    if is_major:
-        note = "**Major release:** Check MongoDB, Redis, Tex Live, and Overleaf Toolkit compatibility before bumping `versions.yml`."
-    else:
-        note = "Update `overleaf_version` in `versions.yml` to the latest version."
-
-    payload = {
-        "embeds": [
-            {
-                "title": f"Overleaf CE Update Available! ({bump})",
-                "description": f"A newer stable Overleaf CE release is available on Docker Hub.\n\n{note}",
-                "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "color": color,
-                "footer": {
-                    "text": (
-                        f"MCLeaf • {trigger.capitalize()} Version Check!"
-                        if trigger
-                        else "MCLeaf • Version Check!"
-                    )
-                },
-                "fields": [
-                    {
-                        "name": "Current Version",
-                        "value": f"`{current}`",
-                        "inline": True,
-                    },
-                    {
-                        "name": "Available Stable Release",
-                        "value": f"`{latest}`",
-                        "inline": True,
-                    },
-                    {
-                        "name": "Release Notes",
-                        "value": f"[Overleaf Wiki](https://docs.overleaf.com/on-premises/release-notes/release-notes-{parse(latest)[0]}.x.x)",
-                        "inline": False,
-                    },
-                ],
-                "author": {
-                    "name": "MCLeaf Notification System",
-                    "url": "https://github.com/amr-io/mcleaf",
-                    "icon_url": "https://icons.iconarchive.com/icons/academicons-team/academicons/512/overleaf-icon.png",
-                },
-            }
-        ]
-    }
-
-    req = urllib.request.Request(
-        webhook_url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "mcleaf-version-check",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=10) as response:
-        print(f"Discord webhook responded with HTTP {response.status}")
-
-
 def main():
-    trigger = sys.argv[2] if len(sys.argv) > 2 else None
     versions_yml = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("versions.yml")
     current = read_version_from_yml(versions_yml)
     latest = get_latest_stable()
@@ -114,14 +50,14 @@ def main():
 
     if bump == "none":
         print("Already up to date.")
-        return
 
-    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
-    if not webhook_url:
-        print("::warning::No Discord webhook URL provided; skipping notif.")
-        return
-
-    send_discord_notif(webhook_url, current, latest, bump, trigger)
+    github_output = os.environ.get("GITHUB_OUTPUT")
+    if github_output:
+        with open(github_output, "a", encoding="utf-8") as f:
+            f.write(f"current={current}\n")
+            f.write(f"latest={latest}\n")
+            f.write(f"bump={bump}\n")
+            f.write(f"major={parse(latest)[0]}\n")
 
 
 if __name__ == "__main__":

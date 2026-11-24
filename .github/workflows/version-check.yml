@@ -21,6 +21,30 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Check Overleaf CE version
+        id: check
+        run: python3 .github/scripts/check_overleaf_version.py versions.yml
+
+      - name: Send Webhook Notification
+        if: ${{ steps.check.outputs.bump != 'none' }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL_NOTIF }}
-        run: python3 .github/scripts/check_overleaf_version.py versions.yml ${{ github.event_name }}
+          CURRENT: ${{ steps.check.outputs.current }}
+          LATEST: ${{ steps.check.outputs.latest }}
+          BUMP: ${{ steps.check.outputs.bump }}
+          MAJOR: ${{ steps.check.outputs.major }}
+          TRIGGER: ${{ github.event_name }}
+        run: |
+          TYPE="info"
+          NOTE="Update \`overleaf_version\` in \`versions.yml\` to the latest version."
+          if [ "${BUMP}" = "MAJOR" ]; then
+            TYPE="warning"
+            NOTE="**Major release:** Check MongoDB, Redis, Tex Live, and Overleaf Toolkit compatibility before bumping \`versions.yml\`."
+          fi
+          python3 .github/scripts/webhook_notify.py \
+          --title "Overleaf CE Update Available! (${BUMP})" \
+          --description $"A newer stable Overleaf CE release is available on Docker Hub."$'\n\n'"${NOTE}" \
+          --type "${TYPE}" \
+          --inline-field "Current Version=\`${CURRENT}\`" \
+          --inline-field "Available Stable Release=\`${LATEST}\`" \
+          --field "Release Notes=[Overleaf Wiki](https://docs.overleaf.com/on-premises/release-notes/release-notes-${MAJOR}.x.x)" \
+          --footer "MCLeaf • ${TRIGGER^} Version Check"
